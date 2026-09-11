@@ -1,0 +1,20 @@
+{
+  "name": "Nilgiri Smart Tourism and AR Based Heritage",
+  "short_name": "Nilgiri Tourism",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b5c38",
+  "icons": [
+    {
+      "src": "nilgiris-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "nilgiris-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

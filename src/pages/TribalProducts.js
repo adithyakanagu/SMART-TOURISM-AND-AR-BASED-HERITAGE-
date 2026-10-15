@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import { 
   FaArrowLeft, 
   FaShoppingCart, 
@@ -11,7 +12,7 @@ import {
   FaReceipt,
   FaCreditCard
 } from 'react-icons/fa';
-import { addOrder, loadAppData } from '../data/store';
+import { createPendingOrder, loadAppData } from '../data/store';
 import './TribalProducts.css';
 
 const categories = ['All', 'Textiles', 'Handicrafts', 'Food & Beverages', 'Art & Paintings', 'Wellness'];
@@ -19,6 +20,7 @@ const categories = ['All', 'Textiles', 'Handicrafts', 'Food & Beverages', 'Art &
 function TribalProducts() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [products, setProducts] = useState(() => loadAppData().products);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,15 +36,19 @@ function TribalProducts() {
     state: 'Tamil Nadu',
     pincode: ''
   });
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [paymentReference, setPaymentReference] = useState('');
-  const [bill, setBill] = useState(null);
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderMessage, setOrderMessage] = useState('');
 
   useEffect(() => {
     const syncProducts = () => setProducts(loadAppData().products);
     syncProducts();
     window.addEventListener('storage', syncProducts);
-    return () => window.removeEventListener('storage', syncProducts);
+    window.addEventListener('arSmartTourismDataUpdated', syncProducts);
+    return () => {
+      window.removeEventListener('storage', syncProducts);
+      window.removeEventListener('arSmartTourismDataUpdated', syncProducts);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,33 +127,34 @@ function TribalProducts() {
   };
 
   const openUpiPayment = () => {
-    const upiUrl = `upi://pay?pa=arsmarttourism@upi&pn=AR%20Smart%20Tourism&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Nilgiris order for ${address.fullName}`)}`;
+    const upiUrl = `upi://pay?pa=7708466812%40upi&pn=The%20Nilgiris%20Tourism&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Nilgiris order for ${address.fullName}`)}`;
     window.location.href = upiUrl;
   };
 
-  const confirmPayment = () => {
-    if (paymentMethod !== 'Cash' && !paymentReference.trim()) {
-      alert('Open UPI, complete the payment, then enter the UPI transaction reference.');
+  const submitForVerification = async () => {
+    if (!paymentReference.trim()) {
+      alert('Complete the UPI payment, then enter its transaction reference.');
       return;
     }
 
-    const order = addOrder({
-      userEmail: 'user@example.com',
-      items: cart.map(({ product, quantity }) => ({
-        name: product.name,
-        quantity,
-        price: product.price
-      })),
-      address: addressText,
-      paymentMethod: paymentMethod === 'UPI' ? `UPI (${paymentReference})` : paymentMethod,
-      total: cartTotal
-    });
-
-    setBill(order);
-    setCart([]);
-    setCheckoutStep('cart');
-    setAddress({ fullName: '', phone: '', house: '', street: '', city: 'Ooty', state: 'Tamil Nadu', pincode: '' });
-    setPaymentReference('');
+    setOrderSubmitting(true);
+    setOrderMessage('');
+    try {
+      const order = await createPendingOrder({
+        items: cart.map(({ product, quantity }) => ({ productId: product.id, quantity })),
+        address: addressText,
+        paymentReference: paymentReference.trim()
+      });
+      setOrderMessage(`Order ${order.id} is awaiting payment verification. Your bill will be emailed to ${user?.email} after the payment is verified.`);
+      setCart([]);
+      setCheckoutStep('cart');
+      setAddress({ fullName: '', phone: '', house: '', street: '', city: 'Ooty', state: 'Tamil Nadu', pincode: '' });
+      setPaymentReference('');
+    } catch (error) {
+      setOrderMessage(error.message || 'The order could not be submitted. Please try again.');
+    } finally {
+      setOrderSubmitting(false);
+    }
   };
 
   return (
@@ -310,14 +317,7 @@ function TribalProducts() {
                 </label>
               </div>
 
-              <label>
-                Payment Method
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                  <option value="UPI">PhonePe UPI</option>
-                  <option value="Card">Debit / Credit Card</option>
-                  <option value="Cash">Cash on Delivery</option>
-                </select>
-              </label>
+              <p className="payment-method-note">Payment by UPI to <strong>7708466812@upi</strong></p>
             </div>
 
             <div className="checkout-total">
@@ -340,53 +340,28 @@ function TribalProducts() {
             </div>
             <p className="payment-address"><strong>Deliver to:</strong> {addressText}</p>
 
-            {paymentMethod === 'UPI' && (
-              <div className="upi-box">
-                <div className="upi-brand">UPI</div>
-                <h4>Pay securely with UPI</h4>
-                <p>Use the PhonePe app to complete this UPI payment.</p>
-                <p className="upi-id">UPI ID: <strong>arsmarttourism@upi</strong></p>
-                <button className="pay-button" onClick={openUpiPayment}><FaCreditCard /> Open PhonePe</button>
-                <label>
-                  UPI Transaction Reference
-                  <input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Enter reference after payment" />
-                </label>
-              </div>
-            )}
-
-            {paymentMethod === 'Card' && <div className="upi-box"><h4>Card payment</h4><p>Demo payment mode. Enter any transaction reference after completing your test payment.</p><input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Card transaction reference" /></div>}
-            {paymentMethod === 'Cash' && <div className="upi-box"><h4>Cash on Delivery</h4><p>Pay the delivery partner when your order arrives.</p></div>}
+            <div className="upi-box">
+              <div className="upi-brand">UPI</div>
+              <h4>Pay securely with UPI</h4>
+              <p>Pay using any UPI app. An administrator will verify your payment before the bill is issued.</p>
+              <p className="upi-id">UPI ID: <strong>7708466812@upi</strong></p>
+              <button className="pay-button" onClick={openUpiPayment}><FaCreditCard /> Pay with UPI</button>
+              <label>
+                UPI Transaction Reference
+                <input value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Enter UPI transaction reference" required />
+              </label>
+            </div>
 
             <div className="payment-actions">
               <button className="back-payment-button" onClick={() => setCheckoutStep('cart')}>Back to address</button>
-              <button className="pay-button" onClick={confirmPayment}><FaReceipt /> Confirm & Generate Bill</button>
+              <button className="pay-button" onClick={submitForVerification} disabled={orderSubmitting}>
+                <FaReceipt /> {orderSubmitting ? 'Submitting…' : 'Submit Payment for Verification'}
+              </button>
             </div>
           </div>
         )}
 
-        {bill && (
-          <div className="bill-card">
-            <div className="bill-header">
-              <FaReceipt size={28} />
-              <h3>Payment Receipt</h3>
-            </div>
-            <p><strong>Bill No:</strong> {bill.billNumber}</p>
-            <p><strong>Payment Method:</strong> {bill.paymentMethod}</p>
-            <p><strong>Delivery Address:</strong> {bill.address}</p>
-            <div className="bill-items">
-              {bill.items.map((item) => (
-                <div key={`${bill.billNumber}-${item.name}`} className="bill-item">
-                  <span>{item.name} × {item.quantity}</span>
-                  <span>₹{(item.price * item.quantity).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-            <div className="bill-total">
-              <span>Total Paid</span>
-              <strong>₹{bill.total.toLocaleString()}</strong>
-            </div>
-          </div>
-        )}
+        {orderMessage && <p className="order-status-message" role="status">{orderMessage}</p>}
       </main>
     </div>
   );

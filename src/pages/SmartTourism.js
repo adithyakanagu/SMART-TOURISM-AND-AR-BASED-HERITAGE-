@@ -1,10 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   FaArrowLeft,
   FaCompass,
   FaCar,
+  FaGlobe,
+  FaStreetView,
+  FaTimes,
   FaSearchLocation,
   FaHeart,
   FaPlus,
@@ -15,6 +18,8 @@ import { loadAppData } from '../data/store';
 import './SmartTourism.css';
 
 const defaultTourismData = loadAppData();
+const googleMapsEmbedApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+const streetViewCoordinateCache = new Map();
 
 const talukaMapRegions = [
   { id: 'pandalur', name: 'Pandalur', className: 'region-pandalur' },
@@ -27,11 +32,15 @@ const talukaMapRegions = [
 
 function SmartTourism() {
   const navigate = useNavigate();
-  const [tourismSpots] = useState(defaultTourismData.tourismSpots || []);
+  const [tourismSpots, setTourismSpots] = useState(defaultTourismData.tourismSpots || []);
   const [selectedDistrict, setSelectedDistrict] = useState('Nilgiris');
   const [selectedTaluk, setSelectedTaluk] = useState('Ooty');
   const [showTalukPlaces, setShowTalukPlaces] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [earthPlace, setEarthPlace] = useState(null);
+  const [earthViewMode, setEarthViewMode] = useState('satellite');
+  const [streetViewCoordinates, setStreetViewCoordinates] = useState(null);
+  const [streetViewMessage, setStreetViewMessage] = useState('');
   const [fromLocation, setFromLocation] = useState('');
   const [showNavigation, setShowNavigation] = useState(false);
   const [favorites, setFavorites] = useState([]);
@@ -39,6 +48,23 @@ function SmartTourism() {
   const [plannerDays, setPlannerDays] = useState('1');
   const [plannerInterest, setPlannerInterest] = useState('balanced');
   const [aiPlan, setAiPlan] = useState([]);
+
+  useEffect(() => {
+    if (!earthPlace) return undefined;
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setEarthPlace(null);
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [earthPlace]);
+
+  useEffect(() => {
+    const syncTourismSpots = () => setTourismSpots(loadAppData().tourismSpots || []);
+    window.addEventListener('arSmartTourismDataUpdated', syncTourismSpots);
+    return () => window.removeEventListener('arSmartTourismDataUpdated', syncTourismSpots);
+  }, []);
 
   const districts = useMemo(
     () => ['Nilgiris', ...new Set((tourismSpots || []).map((spot) => spot.district).filter(Boolean))],
@@ -138,6 +164,50 @@ function SmartTourism() {
     const destination = `${selectedPlace.name}, ${selectedPlace.taluk}, The Nilgiris, Tamil Nadu`;
     const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(fromLocation)}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openGoogleEarth = (place) => {
+    setEarthPlace(place);
+    setEarthViewMode('satellite');
+    setStreetViewCoordinates(null);
+    setStreetViewMessage('');
+  };
+
+  const openStreetView = async (place) => {
+    setEarthPlace(place);
+    setEarthViewMode('streetview');
+    setStreetViewCoordinates(null);
+    setStreetViewMessage('');
+
+    if (!googleMapsEmbedApiKey) {
+      setStreetViewMessage('Add a Google Maps Embed API key as REACT_APP_GOOGLE_MAPS_API_KEY in .env, then restart the app.');
+      return;
+    }
+
+    const locationQuery = `${place.name}, ${place.taluk}, The Nilgiris, Tamil Nadu, India`;
+    const cacheKey = locationQuery.toLowerCase();
+
+    try {
+      let coordinates = streetViewCoordinateCache.get(cacheKey);
+      if (!coordinates) {
+        const geocodeUrl = new URL('https://nominatim.openstreetmap.org/search');
+        geocodeUrl.search = new URLSearchParams({
+          format: 'jsonv2',
+          limit: '1',
+          countrycodes: 'in',
+          q: locationQuery
+        });
+        const response = await fetch(geocodeUrl);
+        if (!response.ok) throw new Error('Location lookup failed');
+        const [match] = await response.json();
+        if (!match) throw new Error('Location not found');
+        coordinates = `${match.lat},${match.lon}`;
+        streetViewCoordinateCache.set(cacheKey, coordinates);
+      }
+      setStreetViewCoordinates(coordinates);
+    } catch {
+      setStreetViewMessage(`Could not find coordinates for ${place.name}.`);
+    }
   };
 
   return (
@@ -276,6 +346,12 @@ function SmartTourism() {
                     <button type="button" className="spot-action secondary" onClick={() => addToTripPlan(place)}>
                       <FaPlus /> Add to trip
                     </button>
+                    <button type="button" className="spot-action secondary" onClick={() => openGoogleEarth(place)}>
+                      <FaGlobe /> Google Earth
+                    </button>
+                    <button type="button" className="spot-action secondary" onClick={() => openStreetView(place)}>
+                      <FaStreetView /> Street View
+                    </button>
                     <button type="button" className="spot-action" onClick={() => handleNavigation(place)}>View details</button>
                   </div>
                 </article>
@@ -385,6 +461,55 @@ function SmartTourism() {
           </motion.section>
         )}
       </main>
+
+      {earthPlace && (
+        <div className="earth-view-backdrop">
+          <section className="earth-view-dialog" role="dialog" aria-modal="true" aria-labelledby="earth-view-title">
+            <header className="earth-view-header">
+              <div className="earth-view-heading">
+                {earthViewMode === 'streetview' ? <FaStreetView aria-hidden="true" /> : <FaGlobe aria-hidden="true" />}
+                <div>
+                  <h2 id="earth-view-title">{earthPlace.name}</h2>
+                  <p>{earthPlace.taluk}, The Nilgiris, Tamil Nadu</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="earth-view-close"
+                onClick={() => setEarthPlace(null)}
+                aria-label="Close Google Earth view"
+                title="Close"
+              >
+                <FaTimes />
+              </button>
+            </header>
+            {earthViewMode === 'streetview' ? (
+              streetViewMessage ? (
+                <div className="earth-view-message" role="status">
+                  <FaStreetView aria-hidden="true" />
+                  <p>{streetViewMessage}</p>
+                </div>
+              ) : streetViewCoordinates ? (
+                <iframe
+                  title={`Google Street View panorama of ${earthPlace.name}`}
+                  src={`https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(googleMapsEmbedApiKey)}&location=${encodeURIComponent(streetViewCoordinates)}&radius=1000&heading=0&pitch=0&fov=90`}
+                  allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
+                />
+              ) : (
+                <div className="earth-view-message" role="status">Locating {earthPlace.name}...</div>
+              )
+            ) : (
+              <iframe
+                title={`Google Earth satellite map of ${earthPlace.name}`}
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(`${earthPlace.name}, ${earthPlace.taluk}, The Nilgiris, Tamil Nadu, India`)}&t=k&z=15&output=embed`}
+                allowFullScreen
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

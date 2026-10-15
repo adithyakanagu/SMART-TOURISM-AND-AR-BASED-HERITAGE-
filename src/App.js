@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -8,16 +8,19 @@ import SmartTourism from './pages/SmartTourism';
 import TribalHeritage from './pages/TribalHeritage';
 import TribalProducts from './pages/TribalProducts';
 import BadagaLink from './pages/BadagaLink';
+import Checkout from './pages/Checkout';
 import './App.css';
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth();
-  return user ? children : <Navigate to="/login" />;
+  const { user, token, loading } = useAuth();
+  if (loading) return null;
+  return user && token ? children : <Navigate to="/login" replace />;
 }
 
 function AdminRoute({ children }) {
-  const { user } = useAuth();
-  return user && user.role === 'admin' ? children : <Navigate to="/login" />;
+  const { user, token, loading } = useAuth();
+  if (loading) return null;
+  return user && token && user.role === 'admin' ? children : <Navigate to="/login" replace />;
 }
 
 function App() {
@@ -63,6 +66,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TribalProducts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/checkout"
+            element={
+              <ProtectedRoute>
+                <Checkout />
               </ProtectedRoute>
             }
           />

@@ -16,7 +16,66 @@ code {
   box-sizing: border-box;
 }
 
+/* Safe area support — the root never adds its own padding; each page handles its own header */
 html, body, #root {
   height: 100%;
   width: 100%;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+:root {
+  color-scheme: light;
+  --app-ink: #18392f;
+  --app-muted: #718078;
+  --app-paper: #f5f5ef;
+  --app-card: #fffefa;
+  --app-green: #1d6848;
+  --app-line: #e2e8df;
+  /* Safe area CSS custom properties for reuse */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--app-paper);
+  color: var(--app-ink);
+}
+
+button, a, input, select, textarea {
+  font: inherit;
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid #d9a94c;
+  outline-offset: 3px;
+}
+
+@media (max-width: 768px) {
+  html, body, #root {
+    min-height: 100%;
+    height: auto;
+  }
+
+  body {
+    font-size: 15px;
+  }
+
+  input, select, textarea {
+    font-size: 16px;
+  }
 }

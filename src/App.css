@@ -6,7 +6,7 @@
 
 body {
   font-family: 'Poppins', 'Roboto', sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--app-paper, #f5f5ef);
   min-height: 100vh;
   overflow-x: hidden;
 }

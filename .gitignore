@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+node_modules/
+build/
+android/.gradle/
+android/**/build/
+android/app/src/main/assets/public/
+android/local.properties
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+*.zip
+*.apk

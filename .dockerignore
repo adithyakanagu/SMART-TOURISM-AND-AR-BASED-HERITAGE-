@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.dockerignore
+node_modules
+build
+android
+data
+*.apk
+*.aab
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.zip
+npm-debug.log*

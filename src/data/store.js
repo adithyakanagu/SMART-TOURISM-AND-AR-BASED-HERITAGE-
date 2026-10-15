@@ -423,6 +423,70 @@ const getDefaultState = () => ({
 });
 
 export const ADMIN_EMAIL = ADMIN_EMAIL_VALUE;
+const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.protocol.startsWith('http') ? '' : 'http://localhost:5000');
+let adminSyncTimer = null;
+let adminSyncQueue = Promise.resolve();
+
+export function notifyAppDataUpdated() {
+  window.dispatchEvent(new Event('arSmartTourismDataUpdated'));
+}
+
+function requestAuthenticatedApi(route, body) {
+  const token = localStorage.getItem('arTourismToken');
+  if (!token) return Promise.resolve(null);
+
+  return fetch(`${API_BASE_URL}${route}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(body)
+  }).then(async (response) => {
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.message || 'The backend could not save this change.');
+    }
+    return response.json();
+  }).catch((error) => {
+    console.error('Backend save failed:', error.message);
+    return null;
+  });
+}
+
+function scheduleAdminSync(data) {
+  const token = localStorage.getItem('arTourismToken');
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem('arTourismUser') || 'null');
+  } catch {
+    user = null;
+  }
+  if (!token || user?.role !== 'admin') return;
+
+  const snapshot = JSON.stringify(data);
+  window.clearTimeout(adminSyncTimer);
+  adminSyncTimer = window.setTimeout(() => {
+    adminSyncQueue = adminSyncQueue.catch(() => null).then(async () => {
+      const latestToken = localStorage.getItem('arTourismToken');
+      if (!latestToken) return;
+      const response = await fetch(`${API_BASE_URL}/api/data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${latestToken}`
+        },
+        body: snapshot
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.message || 'The backend could not save app data.');
+      }
+    }).catch((error) => {
+      console.error('Admin data sync failed:', error.message);
+    });
+  }, 350);
+}
 
 export function loadAppData() {
   const stored = localStorage.getItem('arSmartTourismData');
@@ -454,6 +518,8 @@ export function loadAppData() {
 
 export function saveAppData(data) {
   localStorage.setItem('arSmartTourismData', JSON.stringify(data));
+  scheduleAdminSync(data);
+  notifyAppDataUpdated();
   return data;
 }
 
@@ -476,44 +542,186 @@ export function addInquiryEntry({ userEmail, subject, type = 'general', message 
   };
 
   saveAppData(nextData);
+  requestAuthenticatedApi('/api/inquiries', { subject: entry.subject, type: entry.type, message: entry.message });
   return entry;
 }
 
-export function addOrder({ userEmail, items, address, paymentMethod, total }) {
-  const data = loadAppData();
-  const billNumber = `BILL-${Date.now().toString().slice(-6)}`;
-  const order = {
-    id: Date.now(),
-    userEmail: userEmail || 'guest@example.com',
-    items: items || [],
-    address: address || '',
-    paymentMethod: paymentMethod || 'UPI',
-    total: Number(total || 0),
-    billNumber,
-    status: 'Confirmed',
-    createdAt: new Date().toISOString()
-  };
+export function loadCart() {
+  try {
+    const stored = window.sessionStorage.getItem('nilgiriCart');
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
-  const nextData = {
-    ...data,
-    orders: [order, ...data.orders],
-    inquiries: [
-      {
-        id: Date.now() + 1,
-        userEmail: userEmail || 'guest@example.com',
-        subject: 'Order payment confirmation',
-        type: 'product',
-        message: `Order ${billNumber} placed for ${items?.length || 0} item(s). Payment method: ${paymentMethod}. Address: ${address}.`,
-        status: 'Pending',
-        reply: '',
-        replyAt: ''
-      },
-      ...data.inquiries
-    ]
-  };
+export function saveCart(cart) {
+  window.sessionStorage.setItem('nilgiriCart', JSON.stringify(cart || []));
+  return cart;
+}
 
-  saveAppData(nextData);
-  return order;
+export function clearCart() {
+  window.sessionStorage.removeItem('nilgiriCart');
+  window.sessionStorage.removeItem('nilgiriCheckoutKey');
+}
+
+export async function refreshAppDataFromServer(token, user) {
+  const authToken = token || localStorage.getItem('arTourismToken');
+  if (!authToken) throw new Error('Please sign in to refresh.');
+  const response = await fetch(`${API_BASE_URL}/api/data`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'Could not refresh data. Check your connection and try again.');
+  }
+  localStorage.setItem('arSmartTourismData', JSON.stringify(result));
+  notifyAppDataUpdated();
+  return result;
+}
+
+// Fetch only the published businesses from the dedicated endpoint
+export async function refreshBusinessesFromServer() {
+  const authToken = localStorage.getItem('arTourismToken');
+  if (!authToken) throw new Error('Please sign in to refresh.');
+  const response = await fetch(`${API_BASE_URL}/api/businesses`, {
+    headers: { Authorization: `Bearer ${authToken}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'Could not refresh businesses. Check your connection and try again.');
+  }
+  // Merge the fresh businesses list into stored app data
+  const stored = loadAppData();
+  const merged = { ...stored, businesses: result.businesses || [] };
+  localStorage.setItem('arSmartTourismData', JSON.stringify(merged));
+  notifyAppDataUpdated();
+  return result.businesses || [];
+}
+
+async function requestAdminCollection(method, route, body) {
+  const token = localStorage.getItem('arTourismToken');
+  if (!token) throw new Error('Please sign in as an administrator.');
+  const response = await fetch(`${API_BASE_URL}${route}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'The change could not be saved.');
+  }
+  if (result.data) {
+    localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+    notifyAppDataUpdated();
+  }
+  return result;
+}
+
+export function createHotelRecord(hotel) {
+  return requestAdminCollection('POST', '/api/admin/hotels', hotel);
+}
+
+export function updateHotelRecord(hotel) {
+  return requestAdminCollection('PUT', `/api/admin/hotels/${encodeURIComponent(hotel.id)}`, hotel);
+}
+
+export function deleteHotelRecord(hotelId) {
+  return requestAdminCollection('DELETE', `/api/admin/hotels/${encodeURIComponent(hotelId)}`);
+}
+
+export function createBusinessRecord(business) {
+  return requestAdminCollection('POST', '/api/admin/businesses', business);
+}
+
+export function updateBusinessRecord(business) {
+  return requestAdminCollection('PUT', `/api/admin/businesses/${encodeURIComponent(business.id)}`, business);
+}
+
+export function deleteBusinessRecord(businessId) {
+  return requestAdminCollection('DELETE', `/api/admin/businesses/${encodeURIComponent(businessId)}`);
+}
+
+export async function startCheckout({ items, customer, idempotencyKey }) {
+  const token = localStorage.getItem('arTourismToken');
+  if (!token) throw new Error('Please sign in before placing an order.');
+  const response = await fetch(`${API_BASE_URL}/api/orders/checkout`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ items, customer, idempotencyKey })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'Checkout failed.');
+  }
+  if (result.data) {
+    localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+    notifyAppDataUpdated();
+  }
+  return result;
+}
+
+export async function startRazorpayPayment(orderId) {
+  const token = localStorage.getItem('arTourismToken');
+  if (!token) throw new Error('Please sign in before paying.');
+  const response = await fetch(`${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/pay`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'Could not start UPI payment.');
+  }
+  return result;
+}
+
+export async function verifyRazorpayPayment({ orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
+  const token = localStorage.getItem('arTourismToken');
+  if (!token) throw new Error('Please sign in before verifying payment.');
+  const response = await fetch(`${API_BASE_URL}/api/orders/${encodeURIComponent(orderId)}/verify-payment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ razorpayOrderId, razorpayPaymentId, razorpaySignature })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'Payment could not be verified.');
+  }
+  if (result.data) {
+    localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+    notifyAppDataUpdated();
+  }
+  return result;
+}
+
+export async function confirmOrderPayment(orderId) {
+  const token = localStorage.getItem('arTourismToken');
+  if (!token) {
+    throw new Error('Please sign in as an administrator to verify this payment.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/admin/orders/${encodeURIComponent(orderId)}/confirm-payment`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'The payment could not be verified.');
+  }
+
+  localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+  notifyAppDataUpdated();
+  return result;
 }
 
 export function addProduct(product) {
@@ -527,6 +735,7 @@ export function addProduct(product) {
     rating: 0,
     reviews: 0,
     image: product.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500',
+    imageOverride: product.image || '',
     description: product.description || 'Nilgiris local product',
     tribe: product.tribe || 'Nilgiris Artisan',
     inStock: product.inStock !== false
@@ -534,6 +743,19 @@ export function addProduct(product) {
 
   saveAppData({ ...data, products: [nextProduct, ...data.products] });
   return nextProduct;
+}
+
+export function addTaxi(taxi) {
+  const data = loadAppData();
+  const nextTaxi = {
+    id: `taxi-${Date.now()}`,
+    name: taxi.name.trim(),
+    available: taxi.available !== false,
+    pricePerTrip: Number(taxi.pricePerTrip || 0)
+  };
+
+  saveAppData({ ...data, taxis: [nextTaxi, ...data.taxis] });
+  return nextTaxi;
 }
 
 export function addUserForm({ targetEmail, title, description, questions, createdBy }) {
@@ -656,4 +878,35 @@ export function replyToInquiry(inquiryId, replyText, status = 'Replied') {
 
 export function getAdminEmail() {
   return ADMIN_EMAIL;
+}
+
+
+export async function createPendingOrder(params) {
+  var items = params.items;
+  var address = params.address;
+  var paymentReference = params.paymentReference;
+  var token = localStorage.getItem('arTourismToken');
+  if (!token) throw new Error('Please sign in before placing an order.');
+  var idempotencyKey = 'pending-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  var response = await fetch(API_BASE_URL + '/api/orders/checkout', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token
+    },
+    body: JSON.stringify({
+      items: items,
+      customer: { address: address, paymentReference: paymentReference },
+      idempotencyKey: idempotencyKey
+    })
+  });
+  var result = await response.json().catch(function () { return {}; });
+  if (!response.ok) {
+    throw new Error(result.message || 'Order submission failed. Please try again.');
+  }
+  if (result.data) {
+    localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+    notifyAppDataUpdated();
+  }
+  return result.order || result;
 }

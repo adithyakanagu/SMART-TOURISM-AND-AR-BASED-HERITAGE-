@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { addBusinessEntry, addProduct, addTourismPlace, addUserForm, loadAppData, replyToInquiry, saveAppData } from '../data/store';
+import { addBusinessEntry, addProduct, addTaxi, addTourismPlace, addUserForm, confirmOrderPayment, loadAppData, replyToInquiry, saveAppData } from '../data/store';
+import { defaultHotelImages, defaultProductImages } from '../data/shoppingImages';
 import { FaArrowLeft, FaBox, FaHotel, FaCar, FaEnvelope, FaCheckCircle, FaMapMarkerAlt, FaBuilding, FaReceipt, FaClipboardList, FaChartBar } from 'react-icons/fa';
 import './AdminDashboard.css';
 
@@ -20,7 +21,28 @@ const tabs = [
 const emptyPlace = { name: '', district: 'Nilgiris', taluk: 'Ooty', type: 'Viewpoint', rush: 'Moderate', nearby: '', description: '' };
 const emptyBusiness = { name: '', type: 'hotel', district: 'Nilgiris', taluk: 'Ooty', category: 'Stay', status: 'Open', contact: '' };
 const emptyProduct = { name: '', category: 'Food & Beverages', price: '', mrp: '', tribe: 'Nilgiris Artisan', image: '', description: '', inStock: true };
+const emptyTaxi = { name: '', pricePerTrip: '', available: true };
 const emptyForm = { targetEmail: '', title: '', description: '', questions: '' };
+
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('Choose an image smaller than 12 MB.');
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not prepare this image.');
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/webp', 0.8);
+  } finally {
+    bitmap.close();
+  }
+}
+
 const adminTalukMapRegions = [
   { id: 'pandalur', name: 'Pandalur', className: 'region-pandalur' },
   { id: 'gudalur', name: 'Gudalur', className: 'region-gudalur' },
@@ -40,13 +62,22 @@ function AdminDashboard() {
   const [newBusiness, setNewBusiness] = useState(emptyBusiness);
   const [selectedAdminTaluk, setSelectedAdminTaluk] = useState('Ooty');
   const [newProduct, setNewProduct] = useState(emptyProduct);
+  const [newTaxi, setNewTaxi] = useState(emptyTaxi);
   const [newForm, setNewForm] = useState(emptyForm);
+  const [imageErrors, setImageErrors] = useState({});
+  const [paymentActionId, setPaymentActionId] = useState(null);
 
   useEffect(() => {
     if (!user || user.email !== 'adithya01022007@gmail.com') {
       navigate('/login');
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    const syncAppData = () => setData(loadAppData());
+    window.addEventListener('arSmartTourismDataUpdated', syncAppData);
+    return () => window.removeEventListener('arSmartTourismDataUpdated', syncAppData);
+  }, []);
 
   const summary = useMemo(() => ({
     products: data.products.length,
@@ -59,12 +90,12 @@ function AdminDashboard() {
   }), [data]);
 
   const analytics = useMemo(() => ({
-    revenue: (data.orders || []).reduce((total, order) => total + Number(order.total || 0), 0),
+    revenue: (data.orders || []).filter((order) => order.status === 'Confirmed').reduce((total, order) => total + Number(order.total || 0), 0),
     pendingQueries: (data.inquiries || []).filter((inquiry) => inquiry.status === 'Pending').length,
     unansweredForms: (data.forms || []).filter((form) => form.status !== 'Answered').length,
     availableHotels: (data.hotels || []).filter((hotel) => hotel.available).length,
     availableTaxis: (data.taxis || []).filter((taxi) => taxi.available).length,
-    topProducts: Object.entries((data.orders || []).flatMap((order) => order.items || []).reduce((counts, item) => ({ ...counts, [item.name]: (counts[item.name] || 0) + Number(item.quantity || 0) }), {})).sort(([, first], [, second]) => second - first).slice(0, 5)
+    topProducts: Object.entries((data.orders || []).filter((order) => order.status === 'Confirmed').flatMap((order) => order.items || []).reduce((counts, item) => ({ ...counts, [item.name]: (counts[item.name] || 0) + Number(item.quantity || 0) }), {})).sort(([, first], [, second]) => second - first).slice(0, 5)
   }), [data]);
 
   const persist = (nextData) => {
@@ -88,6 +119,35 @@ function AdminDashboard() {
         hotel.id === id ? { ...hotel, [field]: field === 'roomsAvailable' || field === 'pricePerNight' ? Number(value) : value } : hotel
       )
     });
+  };
+
+  const handleImageUpload = async (type, id, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const errorKey = `${type}-${id}`;
+    setImageErrors((current) => ({ ...current, [errorKey]: '' }));
+
+    try {
+      const image = await compressImage(file);
+      if (type === 'product') updateProduct(id, 'imageOverride', image);
+      else updateHotel(id, 'imageOverride', image);
+    } catch (error) {
+      setImageErrors((current) => ({ ...current, [errorKey]: error.message || 'Could not load this image.' }));
+    }
+    event.target.value = '';
+  };
+
+  const handleNewProductImageUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImageErrors((current) => ({ ...current, newProduct: '' }));
+    try {
+      const image = await compressImage(file);
+      setNewProduct((current) => ({ ...current, image }));
+    } catch (error) {
+      setImageErrors((current) => ({ ...current, newProduct: error.message || 'Could not load this image.' }));
+    }
+    event.target.value = '';
   };
 
   const updateTaxi = (id, field, value) => {
@@ -157,6 +217,17 @@ function AdminDashboard() {
     setNewProduct(emptyProduct);
   };
 
+  const handleAddTaxi = (event) => {
+    event.preventDefault();
+    const name = newTaxi.name.trim();
+    const pricePerTrip = Number(newTaxi.pricePerTrip);
+    if (!name || !Number.isFinite(pricePerTrip) || pricePerTrip < 0) return;
+
+    addTaxi({ ...newTaxi, name, pricePerTrip });
+    setData(loadAppData());
+    setNewTaxi(emptyTaxi);
+  };
+
   const handleSendForm = (event) => {
     event.preventDefault();
     const questions = newForm.questions.split('\n').map((text, index) => ({ id: index + 1, text: text.trim() })).filter((question) => question.text);
@@ -164,6 +235,20 @@ function AdminDashboard() {
     addUserForm({ ...newForm, questions, createdBy: user?.email });
     setData(loadAppData());
     setNewForm(emptyForm);
+  };
+
+  const handleConfirmOrderPayment = async (orderId) => {
+    if (!window.confirm('Confirm that this UPI payment has been received, then generate and email the bill?')) return;
+    setPaymentActionId(orderId);
+    try {
+      const result = await confirmOrderPayment(orderId);
+      setData(result.data);
+      window.alert(result.message);
+    } catch (error) {
+      window.alert(error.message || 'Could not confirm this payment.');
+    } finally {
+      setPaymentActionId(null);
+    }
   };
 
   const updateInquiryStatus = (id, status) => {
@@ -256,7 +341,7 @@ function AdminDashboard() {
           <section className="admin-panel">
             <h2>Operations Analytics</h2>
             <div className="analytics-grid">
-              <div className="analytics-card"><span>Total order value</span><strong>₹{analytics.revenue.toLocaleString()}</strong></div>
+              <div className="analytics-card"><span>Paid order value</span><strong>₹{analytics.revenue.toLocaleString()}</strong></div>
               <div className="analytics-card"><span>Pending queries</span><strong>{analytics.pendingQueries}</strong></div>
               <div className="analytics-card"><span>Unanswered forms</span><strong>{analytics.unansweredForms}</strong></div>
               <div className="analytics-card"><span>Available stays</span><strong>{analytics.availableHotels}</strong></div>
@@ -279,6 +364,12 @@ function AdminDashboard() {
               <input type="number" min="0" value={newProduct.mrp} onChange={(e) => setNewProduct({ ...newProduct, mrp: e.target.value })} placeholder="MRP" />
               <input value={newProduct.tribe} onChange={(e) => setNewProduct({ ...newProduct, tribe: e.target.value })} placeholder="Artisan / tribe" />
               <input value={newProduct.image} onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })} placeholder="Image URL (optional)" />
+              <label className="admin-image-upload">
+                Upload product image
+                <input type="file" accept="image/*" onChange={handleNewProductImageUpload} />
+              </label>
+              {newProduct.image && <img className="admin-new-image-preview" src={newProduct.image} alt={`${newProduct.name || 'New product'} preview`} />}
+              {imageErrors.newProduct && <p className="admin-image-error" role="alert">{imageErrors.newProduct}</p>}
               <textarea value={newProduct.description} onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })} placeholder="Product description" />
               <label className="form-checkbox">
                 <input type="checkbox" checked={newProduct.inStock} onChange={(e) => setNewProduct({ ...newProduct, inStock: e.target.checked })} />
@@ -316,6 +407,31 @@ function AdminDashboard() {
                     Category
                     <input type="text" value={product.category} onChange={(e) => updateProduct(product.id, 'category', e.target.value)} />
                   </label>
+
+                  <div className="admin-image-editor">
+                    <img
+                      className="admin-image-preview"
+                      src={product.imageOverride || defaultProductImages[product.name] || product.image}
+                      alt={`${product.name} preview`}
+                    />
+                    <label>
+                      Image URL
+                      <input
+                        type="url"
+                        value={product.imageOverride && !product.imageOverride.startsWith('data:') ? product.imageOverride : ''}
+                        onChange={(e) => updateProduct(product.id, 'imageOverride', e.target.value)}
+                        placeholder="Paste an image URL"
+                      />
+                    </label>
+                    <label className="admin-image-upload">
+                      Upload new image
+                      <input type="file" accept="image/*" onChange={(event) => handleImageUpload('product', product.id, event)} />
+                    </label>
+                    <button type="button" className="admin-image-reset" onClick={() => updateProduct(product.id, 'imageOverride', '')}>
+                      Use default image
+                    </button>
+                    {imageErrors[`product-${product.id}`] && <p className="admin-image-error" role="alert">{imageErrors[`product-${product.id}`]}</p>}
+                  </div>
                 </div>
               ))}
             </div>
@@ -356,6 +472,31 @@ function AdminDashboard() {
                     <input type="text" value={hotel.city} onChange={(e) => updateHotel(hotel.id, 'city', e.target.value)} />
                   </label>
 
+                  <div className="admin-image-editor">
+                    <img
+                      className="admin-image-preview"
+                      src={hotel.imageOverride || defaultHotelImages[hotel.name] || hotel.image || '/shopping/hill-crest-residency.webp'}
+                      alt={`${hotel.name} preview`}
+                    />
+                    <label>
+                      Image URL
+                      <input
+                        type="url"
+                        value={hotel.imageOverride && !hotel.imageOverride.startsWith('data:') ? hotel.imageOverride : ''}
+                        onChange={(e) => updateHotel(hotel.id, 'imageOverride', e.target.value)}
+                        placeholder="Paste an image URL"
+                      />
+                    </label>
+                    <label className="admin-image-upload">
+                      Upload new image
+                      <input type="file" accept="image/*" onChange={(event) => handleImageUpload('hotel', hotel.id, event)} />
+                    </label>
+                    <button type="button" className="admin-image-reset" onClick={() => updateHotel(hotel.id, 'imageOverride', '')}>
+                      Use default image
+                    </button>
+                    {imageErrors[`hotel-${hotel.id}`] && <p className="admin-image-error" role="alert">{imageErrors[`hotel-${hotel.id}`]}</p>}
+                  </div>
+
                   <button type="button" className="delete-record-btn" onClick={() => deleteHotel(hotel.id)}>
                     Delete Hotel
                   </button>
@@ -368,6 +509,34 @@ function AdminDashboard() {
         {activeTab === 'taxis' && (
           <section className="admin-panel">
             <h2>Taxi Availability & Pricing</h2>
+            <form className="admin-form taxi-create-form" onSubmit={handleAddTaxi}>
+              <input
+                value={newTaxi.name}
+                onChange={(event) => setNewTaxi({ ...newTaxi, name: event.target.value })}
+                placeholder="Taxi name (e.g. Sedan)"
+                aria-label="Taxi name"
+                required
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={newTaxi.pricePerTrip}
+                onChange={(event) => setNewTaxi({ ...newTaxi, pricePerTrip: event.target.value })}
+                placeholder="Price per trip"
+                aria-label="Price per trip"
+                required
+              />
+              <label className="form-checkbox">
+                <input
+                  type="checkbox"
+                  checked={newTaxi.available}
+                  onChange={(event) => setNewTaxi({ ...newTaxi, available: event.target.checked })}
+                />
+                Available to users
+              </label>
+              <button type="submit" className="admin-submit-btn">Add Taxi</button>
+            </form>
             <div className="admin-list-grid">
               {data.taxis.map((taxi) => (
                 <div key={taxi.id} className="admin-card">
@@ -612,11 +781,12 @@ function AdminDashboard() {
               {(data.orders || []).map((order) => (
                 <div key={order.id} className="admin-card order-card">
                   <div className="admin-card-header">
-                    <strong>{order.billNumber}</strong>
-                    <span className="status status-confirmed">{order.status}</span>
+                    <strong>{order.billNumber || `Order ${order.id}`}</strong>
+                    <span className={`status ${order.status === 'Payment Verification Pending' ? 'status-pending' : 'status-confirmed'}`}>{order.status}</span>
                   </div>
                   <p><strong>User:</strong> {order.userEmail}</p>
                   <p><strong>Payment:</strong> {order.paymentMethod}</p>
+                  {order.paymentReference && <p><strong>UPI Reference:</strong> {order.paymentReference}</p>}
                   <p><strong>Address:</strong> {order.address}</p>
                   <ul>
                     {(order.items || []).map((item, index) => (
@@ -624,6 +794,29 @@ function AdminDashboard() {
                     ))}
                   </ul>
                   <p className="total-line"><strong>Total:</strong> ₹{Number(order.total || 0).toLocaleString()}</p>
+                  {order.status === 'Payment Verification Pending' && (
+                    <button
+                      type="button"
+                      className="admin-submit-btn"
+                      disabled={paymentActionId === order.id}
+                      onClick={() => handleConfirmOrderPayment(order.id)}
+                    >
+                      {paymentActionId === order.id ? 'Processing…' : 'Verify payment & email bill'}
+                    </button>
+                  )}
+                  {order.status === 'Confirmed' && order.billEmailSentAt && (
+                    <p className="admin-help-text">Bill emailed {new Date(order.billEmailSentAt).toLocaleString()}</p>
+                  )}
+                  {order.status === 'Confirmed' && order.paymentVerifiedAt && order.billNumber && !order.billEmailSentAt && (
+                    <button
+                      type="button"
+                      className="admin-submit-btn"
+                      disabled={paymentActionId === order.id}
+                      onClick={() => handleConfirmOrderPayment(order.id)}
+                    >
+                      {paymentActionId === order.id ? 'Processing…' : 'Retry bill email'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

@@ -353,6 +353,63 @@
   background: #f9fbfa;
 }
 
+.admin-image-editor {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #dfe9e2;
+  border-radius: 12px;
+  background: #f8fbf9;
+}
+
+.admin-image-preview,
+.admin-new-image-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 9px;
+  background: #e5ece8;
+  object-fit: cover;
+}
+
+.admin-image-editor label,
+.admin-image-upload {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.admin-image-editor .admin-image-upload input[type='file'],
+.admin-form .admin-image-upload input[type='file'] {
+  margin-top: 0;
+  padding: 8px;
+  text-transform: none;
+}
+
+.admin-image-reset {
+  border: 1px solid #cdded3;
+  border-radius: 9px;
+  padding: 9px 11px;
+  color: #315647;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.admin-image-error {
+  margin: 0;
+  color: #a33838;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.admin-new-image-preview {
+  grid-column: 1 / -1;
+  max-width: 420px;
+}
+
 .admin-field-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

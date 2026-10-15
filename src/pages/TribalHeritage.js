@@ -14,7 +14,7 @@ const tribes = [
     language: 'Toda (Dravidian)',
     occupation: 'Buffalo herding, dairy work',
     heritage: 'Famous for distinctive barrel-vaulted huts called "mands", intricate embroidery (pukhoor), and buffalo-centric culture. Their art features geometric patterns in red and black on white cloth.',
-    history: 'The Todas are considered the original inhabitants of the Nilgiri Hills, dating back thousands of years. They have a unique polyandrous marriage system and are one of the most photographed tribes in India. Their culture revolves around the sacred buffalo, and they maintain complex ritual relationships with other Nilgiri tribes.',
+    history: 'The Todas are considered original inhabitants of the Nilgiri Hills, dating back thousands of years. They have a unique polyandrous marriage system and are one of the most photographed tribes in India. Their culture revolves around the sacred buffalo, and they maintain complex ritual relationships with other Nilgiri tribes.',
     religion: 'Buffalo worship, animistic beliefs',
     location: 'Nilgiri plateau, mainly Ooty and surrounding areas',
     detailed: {
@@ -78,7 +78,7 @@ const tribes = [
     language: 'Irula (Dravidian)',
     occupation: 'Snake catching, honey gathering, labor',
     heritage: 'Famous as traditional snake catchers with extraordinary knowledge of reptiles. They practice unique rituals related to snake worship and have extensive knowledge of forest ecology.',
-    history: 'The Irulas migrated to the Nilgiris from the plains of Karnataka and Tamil Nadu. They traditionally lived in forest hamlets and were known for catching snakes and gathering forest products. Many now work in plantations while maintaining their cultural identity.',
+    history: 'The Irulas are indigenous forest-dwelling inhabitants of the lower Nilgiri slopes. They traditionally lived in forest hamlets and were known for catching snakes and gathering forest products. Many now work in plantations while maintaining their cultural identity.',
     religion: 'Hindu with strong animistic elements, snake worship',
     location: 'Lower regions and forest fringes of Nilgiris'
   },
@@ -90,21 +90,76 @@ const tribes = [
     language: 'Paniya (Dravidian)',
     occupation: 'Agriculture, plantation labor',
     heritage: 'Traditional agricultural workers with rich oral traditions. They have distinctive jewelry, tattoos, and folk songs. Their culture emphasizes community living and seasonal festivals.',
-    history: 'The Paniyas are classified as a Primitive Tribal Group. They traditionally practiced shifting cultivation and lived in autonomous settlements. Many now work on tea and coffee plantations while preserving their language and customs.',
+    history: 'The Paniyas are classified as an indigenous tribal group of the Nilgiri region. They traditionally practiced shifting cultivation and lived in autonomous settlements. Many now work on tea and coffee plantations while preserving their language and customs.',
     religion: 'Hindu with tribal deities, ancestor worship',
     location: 'Throughout Nilgiri district, especially plantation areas'
   },
   {
     id: 6,
     name: 'Badaga',
-    image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
-    population: '~200,000',
+    image: '/badaga/badaga7.jpg',
+    population: '~200,000+',
     language: 'Badaga (Dravidian)',
-    occupation: 'Agriculture, business, education',
-    heritage: 'The largest tribal community in Nilgiris, known for their agricultural prowess and emphasis on education. They maintain elaborate funeral ceremonies (karsh) and have a rich oral literature tradition.',
-    history: 'The Badagas migrated from the Mysore plains of Karnataka around the 16th century after the fall of the Vijayanagar Empire. Despite being migrants, they became the dominant agricultural community and political leaders in the Nilgiris. They maintain complex exchange relationships with Todas, Kotas, and Kurumbas.',
-    religion: 'Hindu (Shaiva sect)',
-    location: 'Throughout Nilgiri Hills, especially Kotagiri, Ooty'
+    occupation: 'Agriculture, tea farming, business, education, governance',
+    heritage: 'The largest native indigenous tribal community in the Nilgiris, celebrated for their vibrant agricultural traditions, sacred Hettai Amman festival, unique white attire (Kattu Mundu & Thundu), traditional Hatti settlements, rich oral folklore, and legendary cuisine like Avarai Uthaka.',
+    history: 'The Badagas are native, indigenous inhabitants of the Nilgiri Hills and represent the largest tribal community in the region. Living in harmony with the Nilgiri highlands since ancient times, they established traditional self-governing village councils (Hattis across 18 Seemais) and developed an advanced agricultural economy while preserving deep ancestral and spiritual bonds with the hills.',
+    religion: 'Shaivite & Goddess Hettai Amman worship, ancestral reverence',
+    location: 'Throughout the Nilgiri Hills (Kotagiri, Ooty, Coonoor, Gudalur)',
+    detailed: {
+      introduction: 'The Badagas are the largest native indigenous community of the Nilgiri Hills. Defined by their deep-rooted spiritual connection to Goddess Hettai Amman, pristine traditional white attire, communal Hatti villages, rich Badaga language, terraced agriculture, and distinctive culinary heritage, they form the cornerstone of Nilgiri hill history.',
+      historyDetail: 'Native to the Nilgiri plateau since ancient times, the Badaga people cultivated the high altitude hills and built an intricate social system based on 18 Seemais (traditional territorial divisions) and self-governing Hattis (villages). Badaga oral tradition, songs, genealogical history, architectural heritage, and ecological stewardship affirm their continuous native presence and historical leadership in the Nilgiri ecosystem.',
+      belief: 'Badaga spiritual life centers around Goddess Hettai Amman (symbolizing purity, motherly protection, and divine grace) along with ancestor worship (Ayya/Amma) and deep reverence for nature. Sacred groves, village temples (Gudi), and mountain shrines play a central role in community harmony.',
+      sections: [
+        {
+          title: 'Hettai Amman Thiruvizha & Sacred Festivals',
+          text: 'The Hettai Amman Thiruvizha is the grandest annual Badaga festival (celebrated in Dec/Jan). Hundreds of thousands of devotees dress in spotless white attire (Kattu Mundu, Thundu, Seelai) and walk barefoot to holy sites like Rethi and Beragani, honoring Goddess Hettai with sacred staves (Bethi), music, and prayers.',
+          icon: '👑'
+        },
+        {
+          title: 'Traditional Hatti Villages & Architecture',
+          text: 'A traditional Badaga village is known as a "Hatti". Hattis feature rows of whitewashed houses built side-by-side with open front verandas (Palla) facing a communal courtyard (Mane Suttu) where elders gather and festivals are celebrated.',
+          icon: '🏡'
+        },
+        {
+          title: 'Badaga Gastronomy: Avarai Uthaka & Cuisine',
+          text: 'Badaga cuisine is renowned for Avarai Uthaka (a rich curry made with native field beans, mountain potatoes, and roasted Badaga Thool spice), Eragi Koru (steamed finger-millet balls), Gannake Uthaka, and traditional sun-dried lentils (Sandage).',
+          icon: '🍲'
+        },
+        {
+          title: 'Language, Oral Ballads & Folklore',
+          text: 'The Badaga language (Badagu) is an ancient, expressive South Dravidian language with a rich oral tradition of folk ballads (Aata), proverbs (Gadde), and riddles that pass history and wisdom through generations.',
+          icon: '🗣️'
+        },
+        {
+          title: 'Traditional Attire & Cultural Identity',
+          text: 'Badaga clothing is iconic: men wear the white Kattu Mundu and Thundu (turban/shawl), while women wear the elegant white Seelai wrapped gracefully with a headscarf (Mundu). The white color symbolizes purity, truth, and community unity.',
+          icon: '👔'
+        },
+        {
+          title: 'Terraced Agriculture & Eco-Stewardship',
+          text: 'Badagas mastered high-altitude farming in the Nilgiris, cultivating tea, coffee, potatoes, hill vegetables, and native grains while preserving mountain soil and watershed ecosystems for centuries.',
+          icon: '🌱'
+        }
+      ],
+      arExperiences: [
+        'AR Virtual Hatti Tour: Step inside a traditional Badaga village courtyard and row house.',
+        'Hettai Thiruvizha White Attire AR: Experience interactive 3D models of traditional Badaga Kattu Mundu & Seelai.',
+        'Badaga Culinary Recipe Explorer: Interactive step-by-step breakdown of cooking authentic Avarai Uthaka.',
+        'Badaga Language & Proverbs Audio Guide: Listen to native Badaga folk songs and traditional proverbs.',
+        'Nilgiri Seemai Map: Explore the 18 traditional territorial divisions and ancestral sites.'
+      ],
+      gallery: [
+        { src: '/badaga/badaga1.webp', label: 'Badaga Heritage & Community Life' },
+        { src: '/badaga/badaga3.webp', label: 'Traditional White Attire & Cultural Elegance' },
+        { src: '/badaga/badaga4.webp', label: 'Badaga Hatti Village & Landscape' },
+        { src: '/badaga/badaga5king.jpg', label: 'Badaga Historical Leaders & Ancestral Heritage' },
+        { src: '/badaga/badaga6.webp', label: 'Cultural Rituals & Community Celebration' },
+        { src: '/badaga/badaga7.jpg', label: 'Hettai Festival & Traditional Badaga Dance (Badaga Aata)' },
+        { src: '/badaga/badaga8.avif', label: 'Badaga Traditional Culinary & Food Heritage' },
+        { src: '/badaga/badaga9.avif', label: 'Badaga Lifestyle & Highland Traditions' }
+      ],
+      responsibleNote: 'Respect local Hatti traditions and sacred Hettai Amman festival protocols. Always obtain permission before photographing private village homes or sacred rituals.'
+    }
   }
 ];
 
@@ -201,7 +256,7 @@ function TribalHeritage() {
               {selectedTribe.detailed && (
                 <div className="tribe-featured-story">
                   <div className="story-kicker">Nilgiris Indigenous Heritage</div>
-                  <h3>Who are the Todas?</h3>
+                  <h3>Who are the {selectedTribe.name}s?</h3>
                   <p>{selectedTribe.detailed.introduction}</p>
                 </div>
               )}
@@ -230,7 +285,7 @@ function TribalHeritage() {
               </div>
 
               <div className="info-section">
-                <h3>📜 History</h3>
+                <h3>📜 Native History</h3>
                 <p className="history-text">{selectedTribe.detailed?.historyDetail || selectedTribe.history}</p>
               </div>
 
@@ -254,7 +309,7 @@ function TribalHeritage() {
                   </div>
 
                   <div className="toda-ar-panel">
-                    <h3>📱 Toda AR Heritage Experiences</h3>
+                    <h3>📱 {selectedTribe.name} AR Heritage Experiences</h3>
                     <div className="toda-ar-list">
                       {selectedTribe.detailed.arExperiences.map((experience) => <div key={experience}>◈ {experience}</div>)}
                     </div>
@@ -262,7 +317,7 @@ function TribalHeritage() {
 
                   <div className="toda-gallery">
                     <div className="toda-gallery-heading">
-                      <h3>📷 Toda Heritage Gallery</h3>
+                      <h3>📷 {selectedTribe.name} Heritage Gallery</h3>
                       <p>Images supplied for this heritage module. Cultural use and publication should follow community and photographer permissions.</p>
                     </div>
                     <div className="toda-gallery-grid">
@@ -283,7 +338,7 @@ function TribalHeritage() {
                 <h3>🎨 Cultural Highlights</h3>
                 <div className="highlights-grid">
                   <div className="highlight-card">Traditional Arts & Crafts</div>
-                  <div className="highlight-card">Unique Language & Scripts</div>
+                  <div className="highlight-card">Unique Language & Script</div>
                   <div className="highlight-card">Ancient Rituals & Festivals</div>
                   <div className="highlight-card">Sustainable Living Practices</div>
                 </div>
@@ -297,3 +352,4 @@ function TribalHeritage() {
 }
 
 export default TribalHeritage;
+

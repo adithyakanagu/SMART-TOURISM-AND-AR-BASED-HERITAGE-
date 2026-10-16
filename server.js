@@ -155,6 +155,42 @@ function passwordsMatch(expected, actual) {
   return crypto.timingSafeEqual(left, right);
 }
 
+
+// ── Password hashing using built-in crypto (no bcrypt needed) ───────────────
+function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+
+function createSalt() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function verifyPassword(password, hash, salt) {
+  const check = hashPassword(password, salt);
+  const a = Buffer.from(check, 'hex');
+  const b = Buffer.from(hash, 'hex');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+// ── User DB helpers ──────────────────────────────────────────────────────────
+function getUserByEmail(email) {
+  try {
+    return database.raw.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
+  } catch (e) {
+    return null;
+  }
+}
+
+function createUser(email, password) {
+  const salt = createSalt();
+  const hash = hashPassword(password, salt);
+  database.raw.prepare(
+    'INSERT OR IGNORE INTO users (email, password_hash, salt, role, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(email.toLowerCase().trim(), hash, salt, 'user', new Date().toISOString());
+}
+// ── End password helpers ─────────────────────────────────────────────────────
+
 function findCollectionRecord(records, id) {
   return (records || []).find((record) => String(record.id) === String(id));
 }
@@ -386,6 +422,60 @@ app.get('/api/health', (req, res) => {
     emailConfigured: EMAIL_CONFIGURED,
     paymentsConfigured: razorpayConfigured()
   });
+});
+
+
+// ── Register with email + password ──────────────────────────────────────────
+app.post('/api/auth/register', guestLoginLimiter, (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Please provide a valid email address.' });
+  }
+  if (email === ADMIN_EMAIL.toLowerCase()) {
+    return res.status(400).json({ message: 'This email cannot be used for self-registration.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+  }
+
+  const existing = getUserByEmail(email);
+  if (existing) {
+    return res.status(409).json({ message: 'An account with this email already exists. Please log in.' });
+  }
+
+  createUser(email, password);
+  const user = buildUser(email);
+  return res.status(201).json({ user, token: createToken(user), message: 'Account created successfully.' });
+});
+
+// ── Login with email + password ──────────────────────────────────────────────
+app.post('/api/auth/login', guestLoginLimiter, (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
+  // Admin login
+  if (email === ADMIN_EMAIL.toLowerCase()) {
+    if (!ADMIN_PASSWORD || !passwordsMatch(ADMIN_PASSWORD, password)) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+    const user = buildUser(email);
+    return res.json({ user, token: createToken(user) });
+  }
+
+  // Regular user login
+  const record = getUserByEmail(email);
+  if (!record || !verifyPassword(password, record.password_hash, record.salt)) {
+    return res.status(401).json({ message: 'Invalid email or password.' });
+  }
+
+  const user = buildUser(email);
+  return res.json({ user, token: createToken(user) });
 });
 
 app.post('/api/auth/admin-login', guestLoginLimiter, (req, res) => {

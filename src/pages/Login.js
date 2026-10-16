@@ -4,10 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { ADMIN_EMAIL } from '../data/store';
-import { FaEnvelope, FaLock, FaArrowRight, FaGoogle } from 'react-icons/fa';
+import { FaEnvelope, FaLock, FaArrowRight, FaGoogle, FaEye, FaEyeSlash, FaUserPlus, FaSignInAlt } from 'react-icons/fa';
 import './Login.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.protocol.startsWith('http') ? '' : 'http://localhost:5000');
@@ -22,409 +22,167 @@ const isLocalDevelopmentOrigin = typeof window !== 'undefined' &&
 const parseResponseJson = async (response) => {
   const text = await response.text();
   if (!text || !text.trim()) return {};
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    return { message: text.startsWith('<') ? `Server returned HTTP status ${response.status}.` : text };
-  }
+  try { return JSON.parse(text); }
+  catch (err) { return { message: text.startsWith('<') ? `Server returned HTTP status ${response.status}.` : text }; }
 };
 
 function Login() {
+  const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const isAdminEmail = email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  const switchMode = (m) => { setMode(m); setError(''); setPassword(''); setConfirmPassword(''); };
 
   const finishLogin = (data) => {
     login(data.user.email, data.user.role, data.token, data.user.verified);
     navigate(data.user.role === 'admin' ? '/admin-dashboard' : '/');
   };
 
-  const signInAsGuest = async (normalizedEmail) => {
-    const response = await fetch(`${API_BASE_URL}/api/auth/guest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: normalizedEmail }),
-      signal: AbortSignal.timeout(15000)
-    });
-    const data = await parseResponseJson(response);
-    if (!response.ok) throw new Error(data.message || 'Unable to continue with this email.');
-    finishLogin(data);
-  };
-
-  const requestOtp = async (normalizedEmail) => {
-    const response = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: normalizedEmail }),
-      signal: AbortSignal.timeout(20000)
-    });
-    const data = await parseResponseJson(response);
-    if (response.status === 503) {
-      await signInAsGuest(normalizedEmail);
-      return;
-    }
-    if (!response.ok) throw new Error(data.message || 'Could not send a sign-in code.');
-    setOtpSent(true);
-    setOtp('');
-    setInfo(data.message || 'A sign-in code was sent to your email.');
-  };
-
   useEffect(() => {
     if (!useNativeGoogleSignIn) return undefined;
-
-    let active = true;
-    let appUrlListener;
-    const handleAppUrl = async (url) => {
-      let callbackUrl;
+    let h;
+    App.addListener('appUrlOpen', async (event) => {
+      const url = event?.url || '';
+      if (!url.startsWith('com.nilgiri.smarttourism://auth')) return;
       try {
-        callbackUrl = new URL(url);
-      } catch {
-        return;
-      }
+        const params = new URL(url.replace('com.nilgiri.smarttourism://auth', 'https://placeholder/auth')).searchParams;
+        const ticket = params.get('ticket');
+        if (!ticket) throw new Error('No ticket received.');
+        const res = await fetch(`${API_BASE_URL}/api/auth/google/mobile/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket }), signal: AbortSignal.timeout(15000) });
+        const data = await parseResponseJson(res);
+        if (!res.ok) throw new Error(data.message || 'Google exchange failed.');
+        finishLogin(data);
+      } catch (e) { setError(e.message || 'Google sign-in failed.'); }
+    }).then((handle) => { h = handle; });
+    return () => { h?.remove?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      if (callbackUrl.protocol !== 'com.nilgiri.smarttourism:' || callbackUrl.hostname !== 'auth') return;
-
-      if (callbackUrl.searchParams.has('error')) {
-        setError('Google sign-in was canceled or failed. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      const ticket = callbackUrl.searchParams.get('ticket');
-      if (!ticket) {
-        setError('Google sign-in could not be completed. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/google/mobile/exchange`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticket })
-        });
-        const data = await parseResponseJson(response);
-        if (!response.ok) throw new Error(data.message || 'Google sign-in could not be completed.');
-
-        if (!active) return;
-        login(data.user.email, data.user.role, data.token);
-        navigate(data.user.role === 'admin' ? '/admin-dashboard' : '/');
-      } catch (requestError) {
-        if (active) setError(requestError.message || 'Google sign-in could not be completed. Please try again.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    App.addListener('appUrlOpen', ({ url }) => {
-      void handleAppUrl(url);
-    }).then((listener) => {
-      if (active) appUrlListener = listener;
-      else void listener.remove();
-    }).catch((listenerError) => {
-      console.error('Could not listen for Google sign-in callback:', listenerError);
-      if (active) setError('Could not finish browser sign-in. Please reopen the app and try again.');
-    });
-
-    App.getLaunchUrl().then((launch) => {
-      if (active && launch?.url) return handleAppUrl(launch.url);
-      return undefined;
-    }).catch((launchError) => {
-      console.error('Could not read Google sign-in callback:', launchError);
-      if (active) setError('Could not finish browser sign-in. Please reopen the app and try again.');
-    });
-
-    return () => {
-      active = false;
-      if (appUrlListener) void appUrlListener.remove();
-    };
-  }, [login, navigate]);
-
-  const handleContinueWithEmail = async (e) => {
-    e.preventDefault();
+  const handleLogin = async (e) => {
+    e.preventDefault(); setError('');
+    if (!email.trim() || !password) { setError('Please enter your email and password.'); return; }
     setLoading(true);
-    setError('');
-
-    if (!email || !email.includes('@')) {
-      setError('Please enter a valid email address');
-      setLoading(false);
-      return;
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
     try {
-      if (isAdminEmail) {
-        const response = await fetch(`${API_BASE_URL}/api/auth/admin-login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: normalizedEmail, password }),
-          signal: AbortSignal.timeout(15000)
-        });
-        const data = await parseResponseJson(response);
-        if (!response.ok) throw new Error(data.message || 'Unable to continue with this email.');
-        finishLogin(data);
-      } else if (otpSent) {
-        if (!/^\d{6}$/.test(otp.trim())) {
-          throw new Error('Enter the 6-digit code from your email.');
-        }
-        const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: normalizedEmail, otp: otp.trim() }),
-          signal: AbortSignal.timeout(15000)
-        });
-        const data = await parseResponseJson(response);
-        if (!response.ok) throw new Error(data.message || 'That code could not be verified.');
-        finishLogin(data);
-      } else {
-        await requestOtp(normalizedEmail);
-      }
-    } catch (requestError) {
-      const message = requestError.name === 'TimeoutError' || requestError.name === 'AbortError'
-        ? 'The sign-in service timed out. Please try again later.'
-        : requestError.message;
-      setError(message || 'Could not continue. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: AbortSignal.timeout(15000) });
+      const data = await parseResponseJson(res);
+      if (!res.ok) throw new Error(data.message || 'Login failed. Please check your credentials.');
+      finishLogin(data);
+    } catch (err) { setError(err.message || 'Login failed.'); }
+    finally { setLoading(false); }
   };
 
-  const handleResendOtp = async () => {
+  const handleRegister = async (e) => {
+    e.preventDefault(); setError('');
+    if (isAdminEmail) { setError('This email cannot be registered.'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
     setLoading(true);
-    setError('');
-    setInfo('');
     try {
-      await requestOtp(email.trim().toLowerCase());
-    } catch (requestError) {
-      setError(requestError.message || 'Could not resend the code.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const completeGoogleSignIn = async (credential) => {
-    if (!credential) {
-      throw new Error('Google did not return a sign-in credential. Please try again.');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential })
-    });
-    const data = await parseResponseJson(response);
-    if (!response.ok) throw new Error(data.message || 'Google sign-in failed.');
-
-    login(data.user.email, data.user.role, data.token);
-    navigate(data.user.role === 'admin' ? '/admin-dashboard' : '/');
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: AbortSignal.timeout(15000) });
+      const data = await parseResponseJson(res);
+      if (!res.ok) throw new Error(data.message || 'Registration failed.');
+      finishLogin(data);
+    } catch (err) { setError(err.message || 'Registration failed.'); }
+    finally { setLoading(false); }
   };
 
   const handleGoogleSuccess = async ({ credential }) => {
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      await completeGoogleSignIn(credential);
-    } catch (requestError) {
-      setError(requestError.message || 'Google sign-in failed. Please try email OTP instead.');
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch(`${API_BASE_URL}/api/auth/google`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }), signal: AbortSignal.timeout(15000) });
+      const data = await parseResponseJson(res);
+      if (!res.ok) throw new Error(data.message || 'Google sign-in failed.');
+      finishLogin(data);
+    } catch (err) { setError(err.message || 'Google sign-in failed.'); }
+    finally { setLoading(false); }
   };
 
   const handleBrowserGoogleSignIn = async () => {
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/google/mobile/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await parseResponseJson(response);
-      if (!response.ok) throw new Error(data.message || 'Could not start Google browser sign-in.');
-      if (!data.authorizationUrl || !data.authorizationUrl.startsWith('https://accounts.google.com/')) {
-        throw new Error('The server returned an invalid Google sign-in address.');
-      }
+      const res = await fetch(`${API_BASE_URL}/api/auth/google/mobile/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const data = await parseResponseJson(res);
+      if (!res.ok) throw new Error(data.message || 'Could not start Google sign-in.');
+      if (!data.authorizationUrl?.startsWith('https://accounts.google.com/')) throw new Error('Invalid Google sign-in URL.');
       await Browser.open({ url: data.authorizationUrl });
-    } catch (requestError) {
-      setError(requestError.message || 'Could not open Google sign-in. Please try email OTP instead.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message || 'Could not open Google sign-in.'); }
+    finally { setLoading(false); }
   };
 
   return (
     <div className="login-container">
-      <motion.div
-        className="login-background"
-        style={{ backgroundImage: `url("${teaEstateImage}")` }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
-      >
+      <motion.div className="login-background" style={{ backgroundImage: `url("${teaEstateImage}")` }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1 }}>
         <div className="gradient-overlay"></div>
       </motion.div>
 
-      <motion.div
-        className="login-card"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <motion.div className="login-card" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}>
         <div className="login-header">
-          <motion.div
-            className="logo-icon image-logo-icon"
-            animate={{ rotate: [0, 2, -2, 0] }}
-            transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-          >
+          <motion.div className="logo-icon image-logo-icon" animate={{ rotate: [0, 2, -2, 0] }} transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}>
             <img src="/nilgiris-logo.png" alt="The Nilgiris Tourism logo" />
           </motion.div>
           <h1 className="login-title">The Nilgiris Tourism</h1>
           <p className="login-subtitle">AR Based Heritage</p>
         </div>
 
+        <div className="auth-tabs">
+          <button id="tab-login" className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => switchMode('login')} type="button"><FaSignInAlt /> Sign In</button>
+          <button id="tab-register" className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => switchMode('register')} type="button"><FaUserPlus /> Create Account</button>
+        </div>
+
         <div className="login-form">
-          <motion.form
-            onSubmit={handleContinueWithEmail}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="input-group">
-              <FaEnvelope className="input-icon" />
-              <input
-                type="email"
-                placeholder="Enter your email ID"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setPassword('');
-                  setOtp('');
-                  setOtpSent(false);
-                  setInfo('');
-                }}
-                disabled={otpSent}
-                required
-                className="login-input"
-              />
-            </div>
-
-            {isAdminEmail ? (
-              <>
-                <div className="input-group">
-                  <FaLock className="input-icon" />
-                  <input
-                    type="password"
-                    placeholder="Admin password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                    minLength={12}
-                    required
-                    className="login-input"
-                  />
-                </div>
-                <p className="otp-message">Admin access requires the password configured privately in Railway.</p>
-              </>
-            ) : otpSent ? (
-              <>
-                <div className="input-group">
-                  <FaLock className="input-icon" />
-                  <input
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder="6-digit email code"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    required
-                    className="login-input"
-                  />
-                </div>
-                <p className="otp-message">{info || 'Enter the 6-digit code sent to your email. It expires in 5 minutes.'}</p>
-              </>
-            ) : (
-              <p className="otp-message">
-                We will email a one-time sign-in code. Do not share this code with anyone.
-              </p>
-            )}
-
-            {error && <div className="error-message">{error}</div>}
-
-            <motion.button
-              type="submit"
-              className="login-button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              disabled={loading}
-            >
-              {loading
-                ? (otpSent ? 'Verifying…' : 'Sending code…')
-                : isAdminEmail
-                  ? 'Admin Sign In'
-                  : otpSent
-                    ? 'Verify code'
-                    : 'Send sign-in code'} <FaArrowRight />
-            </motion.button>
-            {otpSent && !isAdminEmail && (
-              <div className="otp-actions">
-                <button type="button" className="back-button" onClick={handleResendOtp} disabled={loading}>
-                  Resend code
-                </button>
-                <button
-                  type="button"
-                  className="back-button"
-                  onClick={() => { setOtpSent(false); setOtp(''); setInfo(''); setError(''); }}
-                  disabled={loading}
-                >
-                  Use a different email
-                </button>
+          <AnimatePresence mode="wait">
+            <motion.form key={mode} onSubmit={mode === 'login' ? handleLogin : handleRegister} initial={{ opacity: 0, x: mode === 'login' ? -20 : 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+              <div className="input-group">
+                <FaEnvelope className="input-icon" />
+                <input id="auth-email" type="email" placeholder="Enter your email address" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} required autoComplete="email" className="login-input" />
               </div>
-            )}
-          </motion.form>
+
+              {mode === 'login' && isAdminEmail && <p className="otp-message">Admin account — enter your private admin password.</p>}
+
+              <div className="input-group">
+                <FaLock className="input-icon" />
+                <input id="auth-password" type={showPassword ? 'text' : 'password'} placeholder={mode === 'login' ? 'Enter your password' : 'Create a password (min 6 chars)'} value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} required minLength={mode === 'register' ? 6 : undefined} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className="login-input" />
+                <button type="button" className="password-toggle" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <FaEyeSlash /> : <FaEye />}</button>
+              </div>
+
+              {mode === 'register' && (
+                <div className="input-group">
+                  <FaLock className="input-icon" />
+                  <input id="auth-confirm-password" type={showPassword ? 'text' : 'password'} placeholder="Confirm your password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }} required autoComplete="new-password" className="login-input" />
+                </div>
+              )}
+
+              {error && <div className="error-message" role="alert">{error}</div>}
+
+              <motion.button id="auth-submit-btn" type="submit" className="login-button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={loading}>
+                {loading ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? (isAdminEmail ? 'Admin Sign In' : 'Sign In') : 'Create Account'} <FaArrowRight />
+              </motion.button>
+
+              <p className="switch-mode-hint">
+                {mode === 'login' ? <>New here? <button type="button" className="link-button" onClick={() => switchMode('register')}>Create a free account</button></> : <>Already have an account? <button type="button" className="link-button" onClick={() => switchMode('login')}>Sign in</button></>}
+              </p>
+            </motion.form>
+          </AnimatePresence>
 
           <div className="google-login-option">
             <div className="login-divider"><span>or</span></div>
             {useNativeGoogleSignIn ? (
-              <button
-                type="button"
-                className="native-google-login"
-                onClick={handleBrowserGoogleSignIn}
-                disabled={loading}
-              >
-                <FaGoogle /> {loading ? 'Opening Google…' : 'Continue with Google'}
-              </button>
+              <button type="button" id="google-native-btn" className="native-google-login" onClick={handleBrowserGoogleSignIn} disabled={loading}><FaGoogle /> {loading ? 'Opening Google…' : 'Continue with Google'}</button>
             ) : googleClientId ? (
               <>
                 <GoogleOAuthProvider clientId={googleClientId}>
-                  <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => setError(`Google sign-in is blocked for ${window.location.origin}. Add this origin to the OAuth client's Authorized JavaScript origins in Google Cloud Console.`)}
-                    text="continue_with"
-                    shape="rectangular"
-                    size="large"
-                    width="280"
-                    useOneTap={false}
-                  />
+                  <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError(`Google sign-in blocked for ${window.location.origin}.`)} text="continue_with" shape="rectangular" size="large" width="280" useOneTap={false} />
                 </GoogleOAuthProvider>
-                {isLocalDevelopmentOrigin && (
-                  <p className="google-origin-note" role="note">
-                    Google sign-in uses <strong>{window.location.origin}</strong>. If Google reports an origin mismatch, confirm this exact origin is authorized on the same Web OAuth client configured for the app.
-                    {' '}<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Open OAuth credentials</a>
-                  </p>
-                )}
+                {isLocalDevelopmentOrigin && <p className="google-origin-note" role="note">Using <strong>{window.location.origin}</strong>. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Open OAuth credentials</a></p>}
               </>
-            ) : (
-              <p className="google-login-unavailable">Google sign-in is not configured. Continue with email above.</p>
-            )}
+            ) : <p className="google-login-unavailable">Google sign-in is not configured.</p>}
           </div>
         </div>
 

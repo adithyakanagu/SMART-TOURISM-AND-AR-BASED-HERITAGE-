@@ -25,9 +25,13 @@
 4. Deploy the service and generate a Railway domain. Wait for `/api/health` to report `{"status":"ok"}`.
 5. In Google Cloud Console, add `https://<railway-domain>` to the Web OAuth client's authorized JavaScript origins and add `https://<railway-domain>/api/auth/google/mobile/callback` to its authorized redirect URIs.
 
-## Temporary email-only app access
+## Email OTP sign-in and shared updates
 
-The `/api/auth/guest` endpoint lets a visitor enter an email address without proving ownership. It always issues a regular-user token (never an administrator token) and is rate-limited. Do not treat this as identity verification; replace it with verified sign-in before relying on account identity or private account data.
+Regular users sign in with a six-digit email code that expires after five minutes. The code and per-email resend history are stored in the Railway SQLite database, so verification is not tied to the phone's browser session or a single server process. The email provider must be configured using `RESEND_API_KEY` and `RESEND_FROM_EMAIL`, or Gmail `SMTP_USER` and `SMTP_PASS`. Keep provider secrets in Railway Variables. The administrator signs in using the private `ADMIN_PASSWORD`; administrator email is not eligible for user OTP sign-in.
+
+The app and API should use the same Railway service/domain so mobile browsers can send and verify OTPs without a separate API setting. The Android APK must be built with `REACT_APP_API_URL` set to the public Railway HTTPS origin, so it never tries to contact its own WebView as the API. Open the Railway URL in a phone browser to use the responsive web app; email codes work in both the phone browser and the APK.
+
+Administrator changes are stored on the shared Railway database. Active users refresh immediately when the backend emits an update, on returning to the app, and at least every 30 seconds as a cross-instance fallback. Railway must keep the database volume mounted at `/data` as described above; do not run the service with local ephemeral storage if updates must survive deploys.
 
 The admin account `adithya01022007@gmail.com` signs in with the `ADMIN_PASSWORD` service variable. Choose a unique password of at least 12 characters and enter it only in Railway's Variables page; never commit it or send it in chat. Admin sign-in is rate-limited. The admin dashboard's **User View** button returns to the regular app interface.
 
@@ -50,6 +54,14 @@ The frontend can be deployed as a GitHub Pages project site while the Express AP
 5. In Google Cloud Console, add the GitHub Pages origin (for example, `https://<github-owner>.github.io`) to the Web OAuth client's authorized JavaScript origins, alongside the Railway origin.
 
 The Pages workflow fails with an explicit message until `REACT_APP_API_URL` is configured. The full-stack Railway deployment above remains an alternative that serves the frontend and API from one origin.
+
+## Climate and travel-safety information
+
+The Climate dashboard and tourism destination details request current conditions from Open-Meteo's forecast API and monthly historical averages from its archive API. No API key is required; the server caches forecasts for 10 minutes and historical averages for 24 hours. Historical charts use daily mean observations from 2015–2024 and are labeled separately from live weather.
+
+The app does not automatically ingest IMD or district warning feeds. **Not Recommended** requires an active administrator-published restriction. **Caution** can result from an active admin advisory or model indicators (at least 20 mm forecast rain in six hours, visibility below 1 km, wind gusts at least 50 km/h, or a WMO thunderstorm code). These are precaution thresholds, not official warning criteria. **Safe to Visit** requires current weather, a source-linked admin assessment checked within the last 12 hours, and no active concern. Otherwise the result is **Unable to Verify Safety**; temperature alone never determines safety.
+
+Administrators can publish, edit, and remove temporary advisories in **Admin Dashboard → Climate Safety**. The server requires an HTTPS `.gov.in` or `.nic.in` source, explicit source confirmation, and an expiry within seven days; safe assessments expire within 12 hours. Review official sources and road conditions before publishing: the dashboard does not verify the truth of an administrator's report. Expired advisories are excluded from tourist-facing safety results.
 
 ## Google sign-in from the Android app
 

@@ -34,7 +34,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "test:server": "node --test tests/otp.test.js tests/catalog.test.js",
+    "test:server": "node --test tests/otp.test.js tests/catalog.test.js tests/climate.test.js tests/database.test.js tests/auth.test.js",
     "eject": "react-scripts eject",
     "server": "node --max-http-header-size=80000 server.js",
     "client": "react-scripts start",

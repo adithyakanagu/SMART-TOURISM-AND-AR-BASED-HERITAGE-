@@ -253,6 +253,23 @@
   line-height: 1.45;
 }
 
+.otp-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.otp-actions .back-button {
+  min-height: 44px;
+  margin-top: 10px;
+}
+
+.login-input:disabled {
+  color: #64736a;
+  background: #f3f6f3;
+  opacity: 1;
+}
+
 .resend-otp-button {
   display: block;
   min-height: 44px;

@@ -9,6 +9,7 @@ import {
   refreshBusinessesFromServer
 } from '../data/store';
 import { defaultHotelImages, defaultProductImages } from '../data/shoppingImages';
+import { API_BASE_URL } from '../data/api';
 import { motion } from 'framer-motion';
 import PullToRefresh from '../components/PullToRefresh';
 import {
@@ -31,9 +32,11 @@ import {
   FaPhone,
   FaMapMarkerAlt,
   FaClock,
-  FaExternalLinkAlt as FaLink
+  FaExternalLinkAlt as FaLink,
+  FaCloudSun
 } from 'react-icons/fa';
 import './Dashboard.css';
+import Climate from './Climate';
 
 const modules = [
   {
@@ -76,10 +79,9 @@ const quickStats = [
 
 const emptyForm = { type: 'general', subject: '', message: '' };
 const emptyBooking = { type: '', itemName: '', date: '', time: '', guests: '1', pickup: '', destination: '', fullName: '', phone: '', notes: '' };
-const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.protocol.startsWith('http') ? '' : 'http://localhost:5000');
-
 const TABS = [
   { id: 'explore', label: 'Explore Nilgiris', icon: FaMapMarkedAlt },
+  { id: 'climate', label: 'Climate', icon: FaCloudSun },
   { id: 'mall', label: 'Shopping Mall', icon: FaShoppingCart },
   { id: 'bookings', label: 'Hotel & Taxi', icon: FaHotel },
   { id: 'businesses', label: 'Businesses', icon: FaStore }
@@ -208,7 +210,7 @@ function Dashboard() {
       if (activeDashboardTab === 'businesses') {
         await refreshBusinessesFromServer();
       } else {
-        await refreshAppDataFromServer(token, user);
+        await refreshAppDataFromServer(token);
       }
       setData(loadAppData());
     } finally {
@@ -526,6 +528,8 @@ function Dashboard() {
               </button>
             ))}
           </div>
+
+          {activeDashboardTab === 'climate' && <Climate />}
 
           {/* ── Mall Tab ── */}
           {activeDashboardTab === 'mall' && <div id="mall-panel" role="tabpanel" aria-labelledby="mall-tab">

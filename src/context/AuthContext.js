@@ -1,17 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ADMIN_EMAIL, loadAppData, notifyAppDataUpdated, refreshAppDataFromServer } from '../data/store';
+import { API_BASE_URL } from '../data/api';
 
 const AuthContext = createContext(null);
-const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.protocol.startsWith('http') ? '' : 'http://localhost:5000');
 const sharedDataCollections = ['products', 'hotels', 'taxis', 'tourismSpots', 'businesses'];
 
 const hasRecords = (data) => Object.values(data || {}).some((records) => Array.isArray(records) && records.length > 0);
 
-const mergeUserData = (localData, serverData) => {
+const mergeUserData = (localData, serverData, preserveLocalWhenEmpty = false) => {
   const merged = { ...localData, ...serverData };
-  sharedDataCollections.forEach((collection) => {
-    if (!serverData[collection]?.length) merged[collection] = localData[collection] || [];
-  });
+  if (preserveLocalWhenEmpty) {
+    sharedDataCollections.forEach((collection) => {
+      if (!serverData[collection]?.length) merged[collection] = localData[collection] || [];
+    });
+  }
   return merged;
 };
 
@@ -84,8 +86,8 @@ export function AuthProvider({ children }) {
         if (user.role === 'admin' && initialized) {
           localStorage.setItem('arSmartTourismData', JSON.stringify(serverData));
           notifyAppDataUpdated();
-        } else if (hasRecords(serverData)) {
-          localStorage.setItem('arSmartTourismData', JSON.stringify(mergeUserData(localData, serverData)));
+        } else if (initialized || hasRecords(serverData)) {
+          localStorage.setItem('arSmartTourismData', JSON.stringify(mergeUserData(localData, serverData, !initialized)));
           notifyAppDataUpdated();
         }
       } catch (error) {
@@ -98,6 +100,53 @@ export function AuthProvider({ children }) {
       cancelled = true;
     };
   }, [token, user?.email, user?.role]);
+
+  useEffect(() => {
+    if (!token || !user?.email) return undefined;
+    let active = true;
+    let refreshing = false;
+    let refreshQueued = false;
+
+    const refresh = async () => {
+      if (!active) return;
+      if (refreshing) {
+        refreshQueued = true;
+        return;
+      }
+
+      refreshing = true;
+      try {
+        await refreshAppDataFromServer(token);
+      } catch (error) {
+        if (active) console.error('Live app data refresh failed:', error.message);
+      } finally {
+        refreshing = false;
+        if (active && refreshQueued) {
+          refreshQueued = false;
+          refresh();
+        }
+      }
+    };
+
+    const stream = typeof EventSource === 'undefined'
+      ? null
+      : new EventSource(`${API_BASE_URL}/api/stream`);
+    stream?.addEventListener('data-updated', refresh);
+    const intervalId = window.setInterval(refresh, 30000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      active = false;
+      stream?.close();
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [token, user?.email]);
 
   const login = (email, role = null, authToken = '', verified = true) => {
     const normalizedEmail = (email || '').trim().toLowerCase();

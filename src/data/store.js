@@ -419,11 +419,11 @@ const getDefaultState = () => ({
   tourismSpots: allDefaultTourismSpots,
   businesses: defaultBusinesses,
   orders: defaultOrders,
-  forms: defaultForms
+  forms: defaultForms,
+  climateAdvisories: []
 });
 
 export const ADMIN_EMAIL = ADMIN_EMAIL_VALUE;
-const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.protocol.startsWith('http') ? '' : 'http://localhost:5000');
 let adminSyncTimer = null;
 let adminSyncQueue = Promise.resolve();
 
@@ -508,7 +508,8 @@ export function loadAppData() {
       ],
       businesses: parsed.businesses || defaultBusinesses,
       orders: parsed.orders || defaultOrders,
-      forms: parsed.forms || defaultForms
+      forms: parsed.forms || defaultForms,
+      climateAdvisories: parsed.climateAdvisories || []
     };
   } catch (error) {
     localStorage.setItem('arSmartTourismData', JSON.stringify(getDefaultState()));
@@ -566,7 +567,7 @@ export function clearCart() {
   window.sessionStorage.removeItem('nilgiriCheckoutKey');
 }
 
-export async function refreshAppDataFromServer(token, user) {
+export async function refreshAppDataFromServer(token) {
   const authToken = token || localStorage.getItem('arTourismToken');
   if (!authToken) throw new Error('Please sign in to refresh.');
   const response = await fetch(`${API_BASE_URL}/api/data`, {
@@ -576,7 +577,15 @@ export async function refreshAppDataFromServer(token, user) {
   if (!response.ok) {
     throw new Error(result.message || 'Could not refresh data. Check your connection and try again.');
   }
-  localStorage.setItem('arSmartTourismData', JSON.stringify(result));
+  const initialized = response.headers.get('X-App-Data-Initialized') === 'true';
+  const localData = loadAppData();
+  const merged = { ...localData, ...result };
+  if (!initialized) {
+    ['products', 'hotels', 'taxis', 'tourismSpots', 'businesses'].forEach((collection) => {
+      if (!result[collection]?.length) merged[collection] = localData[collection] || [];
+    });
+  }
+  localStorage.setItem('arSmartTourismData', JSON.stringify(merged));
   notifyAppDataUpdated();
   return result;
 }
@@ -910,3 +919,4 @@ export async function createPendingOrder(params) {
   }
   return result.order || result;
 }
+import { API_BASE_URL } from './api';

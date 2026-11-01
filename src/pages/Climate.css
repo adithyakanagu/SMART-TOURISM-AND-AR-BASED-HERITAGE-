@@ -1,0 +1,719 @@
+.climate-page {
+  display: grid;
+  width: min(1120px, 100%);
+  gap: 18px;
+  margin: 0 auto 24px;
+  color: #18392f;
+}
+
+.climate-page-header,
+.climate-section-heading,
+.climate-weather-main,
+.climate-destination-heading,
+.climate-advisory-title,
+.climate-weather-footnote,
+.climate-advisory-meta,
+.climate-official-links {
+  display: flex;
+  align-items: center;
+}
+
+.climate-page-header {
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border: 1px solid #dfe9df;
+  border-radius: 22px;
+  background: linear-gradient(125deg, #f8fff8, #fffefa 70%);
+  box-shadow: 0 10px 28px rgba(24, 49, 36, 0.07);
+}
+
+.climate-eyebrow {
+  color: #1d6848;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.climate-page-header h2 {
+  margin: 5px 0;
+  color: #18392f;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.climate-page-header p,
+.climate-section-heading p {
+  margin: 0;
+  color: #718078;
+  line-height: 1.5;
+}
+
+.climate-refresh {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #176d47;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.climate-refresh:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.climate-location-picker {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.55fr) minmax(220px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid #e3e9df;
+  border-radius: 17px;
+  background: #fffefa;
+}
+
+.climate-location-picker label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #315346;
+  font-weight: 800;
+}
+
+.climate-location-picker label svg {
+  color: #1d6848;
+}
+
+.climate-location-picker select {
+  width: 100%;
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid #d8e4d9;
+  border-radius: 12px;
+  color: #18392f;
+  background: #fff;
+}
+
+.climate-weather-card,
+.climate-safety-section,
+.climate-advisories,
+.climate-history-section {
+  padding: 22px;
+  border: 1px solid #e3e9df;
+  border-radius: 21px;
+  background: #fffefa;
+  box-shadow: 0 9px 26px rgba(24, 49, 36, 0.055);
+}
+
+.climate-weather-card.loading {
+  opacity: 0.78;
+}
+
+.climate-weather-main {
+  gap: 18px;
+}
+
+.climate-condition-icon {
+  display: grid;
+  flex: 0 0 86px;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  border-radius: 26px;
+  color: #fff;
+  background: linear-gradient(140deg, #1d6848, #62a77b);
+  box-shadow: 0 9px 20px rgba(29, 104, 72, 0.2);
+}
+
+.climate-condition-icon svg {
+  font-size: 40px;
+  animation: climate-weather-float 3.2s ease-in-out infinite;
+}
+
+@keyframes climate-weather-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.climate-current-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.climate-current-copy > span {
+  color: #60766a;
+  font-weight: 700;
+}
+
+.climate-current-copy strong {
+  color: #18392f;
+  font-size: clamp(2.2rem, 5vw, 3.35rem);
+  letter-spacing: -0.06em;
+  line-height: 1.12;
+}
+
+.climate-current-copy p {
+  margin: 0;
+  color: #476254;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.climate-model-chip {
+  display: grid;
+  gap: 5px;
+  max-width: 260px;
+  margin-left: auto;
+  padding: 12px 15px;
+  border: 1px solid #d9e3dc;
+  border-radius: 15px;
+  background: #f3f6f1;
+}
+
+.climate-model-chip span {
+  color: #697a70;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.climate-model-chip strong {
+  color: #684f16;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.climate-model-chip.safe strong { color: #12643d; }
+.climate-model-chip.caution strong { color: #805500; }
+.climate-model-chip.not-recommended strong { color: #a12626; }
+
+.climate-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.climate-metric {
+  display: grid;
+  min-height: 104px;
+  align-content: start;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid #e7ece5;
+  border-radius: 15px;
+  background: #f8faf6;
+}
+
+.climate-metric svg {
+  color: #1d6848;
+}
+
+.climate-metric span {
+  color: #728078;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.climate-metric strong {
+  color: #203d32;
+  font-size: 1rem;
+}
+
+.climate-weather-footnote {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 13px;
+  color: #62756a;
+  font-size: 0.76rem;
+}
+
+.climate-model-note,
+.climate-safety-disclaimer,
+.climate-nearby-note {
+  margin: 12px 0 0;
+  color: #6d7b73;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.climate-section-heading {
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.climate-heading-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  color: #1d6848;
+  background: #edf6ef;
+}
+
+.climate-section-heading h3 {
+  margin: 0 0 3px;
+  color: #203d32;
+  font-size: 1.14rem;
+}
+
+.climate-section-heading p {
+  font-size: 0.82rem;
+}
+
+.climate-safety-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px 16px;
+  border: 1px solid #e5d7a8;
+  border-left: 5px solid #c79117;
+  border-radius: 14px;
+  color: #533d0d;
+  background: #fff8df;
+}
+
+.climate-safety-status > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 20px;
+}
+
+.climate-safety-status strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.89rem;
+  letter-spacing: 0.025em;
+}
+
+.climate-safety-status p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.climate-safety-status.safe {
+  border-color: #b6dcc1;
+  border-left-color: #21834f;
+  color: #154e31;
+  background: #eaf7ed;
+}
+
+.climate-safety-status.caution {
+  border-color: #efd99b;
+  border-left-color: #d29613;
+  color: #60450b;
+  background: #fff7df;
+}
+
+.climate-safety-status.not-recommended {
+  border-color: #edc2bc;
+  border-left-color: #c83d32;
+  color: #78271f;
+  background: #fff0ed;
+}
+
+.climate-safety-status.unable-to-verify {
+  border-color: #e6d9ad;
+  border-left-color: #b88917;
+  color: #59450f;
+  background: #fff9e8;
+}
+
+.climate-precautions {
+  margin: 12px 0 0;
+  color: #3d594b;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.climate-safety-disclaimer {
+  padding-top: 12px;
+  border-top: 1px solid #e7ece5;
+}
+
+.climate-no-advisories {
+  padding: 15px;
+  border: 1px dashed #d4dfd5;
+  border-radius: 14px;
+  color: #50665a;
+  background: #f8faf6;
+}
+
+.climate-no-advisories strong {
+  color: #354e40;
+}
+
+.climate-no-advisories p {
+  margin: 5px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+.climate-advisory-list {
+  display: grid;
+  gap: 12px;
+}
+
+.climate-advisory-card {
+  padding: 15px;
+  border: 1px solid #ecdca7;
+  border-left: 4px solid #cb9619;
+  border-radius: 14px;
+  background: #fffaf0;
+}
+
+.climate-advisory-card.not-recommended {
+  border-color: #edc2bc;
+  border-left-color: #c83d32;
+  background: #fff4f1;
+}
+
+.climate-advisory-card.safe {
+  border-color: #b6dcc1;
+  border-left-color: #21834f;
+  background: #f1faf2;
+}
+
+.climate-advisory-title {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.climate-advisory-title span {
+  color: #718078;
+  font-size: 0.73rem;
+  text-transform: capitalize;
+}
+
+.climate-advisory-card p {
+  margin: 8px 0 0;
+  color: #465a4e;
+  font-size: 0.87rem;
+  line-height: 1.5;
+}
+
+.climate-advisory-meta {
+  flex-wrap: wrap;
+  gap: 7px 16px;
+  margin-top: 12px;
+  color: #718078;
+  font-size: 0.72rem;
+}
+
+.climate-advisory-meta a,
+.climate-official-links a,
+.climate-chart-source a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #176d47;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.climate-advisory-meta a:hover,
+.climate-official-links a:hover,
+.climate-chart-source a:hover {
+  text-decoration: underline;
+}
+
+.climate-official-links {
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 14px;
+  font-size: 0.82rem;
+}
+
+.climate-season-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.climate-season-tabs button {
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid #dce6dc;
+  border-radius: 12px;
+  color: #52665a;
+  background: #f7faf6;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.climate-season-tabs button[aria-selected='true'] {
+  border-color: #1d6848;
+  color: #fff;
+  background: #1d6848;
+}
+
+.climate-chart {
+  display: grid;
+  min-height: 210px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 14px 12px 0;
+  border-bottom: 1px solid #dce5dc;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 51px, #edf1ec 52px);
+}
+
+.climate-chart-column {
+  display: grid;
+  grid-template-rows: 22px minmax(100px, 1fr) 32px;
+  justify-items: center;
+  color: #597066;
+  font-size: 0.8rem;
+}
+
+.climate-chart-column > strong {
+  color: #315346;
+}
+
+.climate-chart-track {
+  display: flex;
+  width: min(68px, 72%);
+  height: 100%;
+  align-items: flex-end;
+  overflow: hidden;
+  border-radius: 12px 12px 3px 3px;
+  background: rgba(232, 241, 233, 0.55);
+}
+
+.climate-chart-track span {
+  display: block;
+  width: 100%;
+  min-height: 10px;
+  border-radius: 12px 12px 3px 3px;
+  background: linear-gradient(180deg, #76bb89 0%, #1d6848 100%);
+  transition: height 350ms ease;
+}
+
+.climate-chart-column > span {
+  padding-top: 7px;
+  font-weight: 800;
+}
+
+.climate-chart-source {
+  margin: 14px 0 0;
+  color: #708078;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.climate-inline-state,
+.climate-inline-error,
+.climate-error {
+  padding: 11px 13px;
+  border-radius: 12px;
+  line-height: 1.5;
+}
+
+.climate-inline-state {
+  color: #476254;
+  background: #f1f7f1;
+}
+
+.climate-inline-error,
+.climate-error {
+  color: #78271f;
+  background: #fff0ed;
+}
+
+.climate-error {
+  border: 1px solid #edc2bc;
+}
+
+.climate-destination-card {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 17px;
+  border: 1px solid #dde8df;
+  border-radius: 17px;
+  background: #fafffa;
+}
+
+.climate-destination-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #1d6848;
+}
+
+.climate-destination-heading span {
+  margin-left: auto;
+  color: #738078;
+  font-size: 0.8rem;
+}
+
+.climate-destination-weather {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #38594a;
+}
+
+.climate-destination-weather svg {
+  color: #1d6848;
+  font-size: 24px;
+}
+
+.climate-destination-weather strong {
+  color: #18392f;
+  font-size: 1.35rem;
+}
+
+.climate-destination-weather span {
+  font-size: 0.83rem;
+}
+
+.climate-brief-advisory {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  color: #60450b;
+  background: #fff7df;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .climate-page {
+    gap: 13px;
+    margin-bottom: 15px;
+  }
+
+  .climate-page-header,
+  .climate-weather-card,
+  .climate-safety-section,
+  .climate-advisories,
+  .climate-history-section {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .climate-page-header {
+    align-items: flex-start;
+  }
+
+  .climate-page-header p {
+    font-size: 0.83rem;
+  }
+
+  .climate-refresh {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 0.79rem;
+  }
+
+  .climate-location-picker {
+    grid-template-columns: 1fr;
+    gap: 9px;
+    padding: 14px;
+  }
+
+  .climate-weather-main {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .climate-condition-icon {
+    flex-basis: 62px;
+    width: 62px;
+    height: 62px;
+    border-radius: 19px;
+  }
+
+  .climate-condition-icon svg {
+    font-size: 30px;
+  }
+
+  .climate-current-copy strong {
+    font-size: 2.2rem;
+  }
+
+  .climate-current-copy p {
+    font-size: 0.9rem;
+  }
+
+  .climate-model-chip {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .climate-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 15px;
+  }
+
+  .climate-metric {
+    min-height: 94px;
+    padding: 11px;
+  }
+
+  .climate-weather-footnote {
+    display: grid;
+    font-size: 0.72rem;
+  }
+
+  .climate-season-tabs {
+    display: flex;
+    gap: 7px;
+    margin-right: -4px;
+    padding-bottom: 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .climate-season-tabs button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 0.72rem;
+  }
+
+  .climate-chart {
+    min-height: 190px;
+  }
+
+  .climate-section-heading {
+    align-items: flex-start;
+  }
+
+  .climate-section-heading p {
+    font-size: 0.75rem;
+  }
+
+  .climate-advisory-meta {
+    display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .climate-condition-icon svg {
+    animation: none;
+  }
+
+  .climate-chart-track span {
+    transition: none;
+  }
+}

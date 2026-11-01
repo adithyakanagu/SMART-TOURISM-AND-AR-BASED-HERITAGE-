@@ -471,6 +471,129 @@
   cursor: pointer;
 }
 
+.climate-admin-form {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  align-items: start;
+  padding: 18px;
+  border: 1px solid #dce9df;
+  border-radius: 16px;
+  background: #f7fbf8;
+}
+
+.climate-admin-form > label {
+  display: grid;
+  gap: 7px;
+  color: #35574a;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.climate-admin-form .climate-admin-wide {
+  grid-column: 1 / -1;
+}
+
+.climate-admin-form textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.climate-admin-confirm {
+  align-items: flex-start;
+  color: #35574a;
+  font-size: 0.9rem;
+}
+
+.climate-admin-confirm input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.climate-admin-actions,
+.climate-admin-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.climate-admin-actions button,
+.climate-admin-item-actions button {
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.climate-admin-actions .admin-submit-btn {
+  padding: 10px 18px;
+}
+
+.climate-admin-actions .admin-submit-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.climate-admin-cancel,
+.climate-admin-item-actions button:first-child {
+  background: #e9f1eb;
+  color: #2b5945;
+}
+
+.climate-admin-item-actions button:last-child {
+  background: #fff0ef;
+  color: #a52e2e;
+}
+
+.climate-admin-feedback {
+  margin: 0 0 16px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.climate-admin-feedback.error {
+  background: #fff0ef;
+  color: #a52e2e;
+}
+
+.climate-admin-feedback.success {
+  background: #e9f8ee;
+  color: #24633b;
+}
+
+.climate-admin-list {
+  display: grid;
+  gap: 12px;
+}
+
+.climate-admin-list h3 {
+  margin: 8px 0 0;
+  color: #1f473d;
+}
+
+.climate-admin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #dce9df;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.climate-admin-item-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.climate-admin-item-copy > span {
+  color: #587067;
+  font-size: 0.85rem;
+}
+
 .product-create-form,
 .form-create-form {
   padding: 16px;
@@ -649,5 +772,14 @@
 
   .admin-header {
     padding: 18px 16px;
+  }
+
+  .climate-admin-form .climate-admin-wide {
+    grid-column: auto;
+  }
+
+  .climate-admin-item {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

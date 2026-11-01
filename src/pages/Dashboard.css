@@ -454,8 +454,7 @@
 /* ── Tab bar ── */
 .dashboard-tabs {
   display: grid;
-  /* 4 tabs on desktop */
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   width: min(900px, 100%);
   margin: 0 auto 24px;
@@ -1059,7 +1058,7 @@
   .stat-pill strong { font-size: 0.96rem; }
   .stat-pill span   { font-size: 0.62rem; line-height: 1.25; }
 
-  /* ── Fixed bottom nav — 4 tabs ── */
+  /* ── Fixed bottom nav ── */
   .dashboard-tabs {
     position: fixed;
     z-index: 105;
@@ -1067,7 +1066,7 @@
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     left: 12px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 3px;
     width: auto;
     margin: 0;

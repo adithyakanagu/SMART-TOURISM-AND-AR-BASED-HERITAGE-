@@ -9,6 +9,16 @@ const { OAuth2Client } = require('google-auth-library');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 const { createDatabase } = require('./database');
+const {
+  ADVISORY_TYPES,
+  CLIMATE_LOCATIONS,
+  assessTravelSafety,
+  getActiveClimateAdvisories,
+  normalizeClimateAdvisory,
+  resolveClimateLocation,
+  summarizeForecast,
+  summarizeHistoricalAverages
+} = require('./climate');
 const { generateOtp, createOtpRecord, canResendOtp, registerSendAttempt, verifyOtpRecord } = require('./otp');
 const { normalizeHotel, normalizeBusiness, normalizeCheckoutCustomer } = require('./catalog');
 const {
@@ -43,11 +53,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const legacyDataPath = path.join(__dirname, 'data', 'app-data.json');
 const databasePath = process.env.DATABASE_PATH || path.join(__dirname, 'data', 'app-data.sqlite');
 const database = createDatabase(databasePath, legacyDataPath);
-const otpStore = new Map();
-const otpSendLog = new Map();
 const checkoutLocks = new Map();
 const googleMobileAuthStates = new Map();
 const googleMobileAuthTickets = new Map();
+const climateResponseCache = new Map();
 const clients = new Set();
 
 const SMTP_USER = process.env.SMTP_USER;
@@ -78,7 +87,8 @@ const defaultState = {
   orders: [],
   tourismSpots: [],
   businesses: [],
-  forms: []
+  forms: [],
+  climateAdvisories: []
 };
 
 function ensureDatabase() {
@@ -156,41 +166,6 @@ function passwordsMatch(expected, actual) {
 }
 
 
-// ── Password hashing using built-in crypto (no bcrypt needed) ───────────────
-function hashPassword(password, salt) {
-  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-}
-
-function createSalt() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-function verifyPassword(password, hash, salt) {
-  const check = hashPassword(password, salt);
-  const a = Buffer.from(check, 'hex');
-  const b = Buffer.from(hash, 'hex');
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-// ── User DB helpers ──────────────────────────────────────────────────────────
-function getUserByEmail(email) {
-  try {
-    return database.raw.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
-  } catch (e) {
-    return null;
-  }
-}
-
-function createUser(email, password) {
-  const salt = createSalt();
-  const hash = hashPassword(password, salt);
-  database.raw.prepare(
-    'INSERT OR IGNORE INTO users (email, password_hash, salt, role, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(email.toLowerCase().trim(), hash, salt, 'user', new Date().toISOString());
-}
-// ── End password helpers ─────────────────────────────────────────────────────
-
 function findCollectionRecord(records, id) {
   return (records || []).find((record) => String(record.id) === String(id));
 }
@@ -249,6 +224,7 @@ const transporter = SMTP_CONFIGURED
 
 
 const EMAIL_CONFIGURED = RESEND_CONFIGURED || SMTP_CONFIGURED;
+let emailProviderStatus = RESEND_CONFIGURED ? 'configured' : SMTP_CONFIGURED ? 'checking' : 'not-configured';
 
 async function sendAppEmail({ from, to, subject, text, html }) {
   if (RESEND_CONFIGURED) {
@@ -269,15 +245,23 @@ async function sendAppEmail({ from, to, subject, text, html }) {
     });
     const responseText = await response.text();
     if (!response.ok) {
+      emailProviderStatus = 'error';
       throw new Error(`Resend returned HTTP ${response.status}: ${responseText.slice(0, 500)}`);
     }
+    emailProviderStatus = 'ready';
     return;
   }
 
   if (!transporter) {
     throw new Error('No email provider is configured.');
   }
-  await transporter.sendMail({ from, to, subject, text, html });
+  try {
+    await transporter.sendMail({ from, to, subject, text, html });
+    emailProviderStatus = 'ready';
+  } catch (error) {
+    emailProviderStatus = 'error';
+    throw error;
+  }
 }
 
 const otpLimiter = rateLimit({
@@ -306,6 +290,66 @@ const chatLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Chat is receiving too many requests. Please wait a minute and try again.' }
 });
+const climateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Climate requests are temporarily rate limited. Try again shortly.' }
+});
+
+async function getCachedClimateResponse(key, lifetimeMs, load) {
+  const cached = climateResponseCache.get(key);
+  if (cached?.expiresAt > Date.now()) return cached.value;
+  const value = await load();
+  climateResponseCache.set(key, { value, expiresAt: Date.now() + lifetimeMs });
+  if (climateResponseCache.size > 64) {
+    for (const [cacheKey, entry] of climateResponseCache) {
+      if (entry.expiresAt <= Date.now()) climateResponseCache.delete(cacheKey);
+    }
+  }
+  return value;
+}
+
+async function fetchClimateForecast(location) {
+  return getCachedClimateResponse(`forecast:${location.id}`, 10 * 60 * 1000, async () => {
+    const url = new URL('https://api.open-meteo.com/v1/forecast');
+    url.search = new URLSearchParams({
+      latitude: String(location.latitude),
+      longitude: String(location.longitude),
+      current: 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,visibility',
+      hourly: 'precipitation_probability,precipitation,visibility',
+      forecast_days: '2',
+      timezone: 'Asia/Kolkata'
+    });
+    const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!response.ok) throw new Error(`Open-Meteo forecast request returned HTTP ${response.status}.`);
+    return summarizeForecast(await response.json());
+  });
+}
+
+async function fetchClimateAverages(location) {
+  return getCachedClimateResponse(`averages:${location.id}`, 24 * 60 * 60 * 1000, async () => {
+    const url = new URL('https://archive-api.open-meteo.com/v1/archive');
+    url.search = new URLSearchParams({
+      latitude: String(location.latitude),
+      longitude: String(location.longitude),
+      start_date: '2015-01-01',
+      end_date: '2024-12-31',
+      daily: 'temperature_2m_mean',
+      timezone: 'Asia/Kolkata'
+    });
+    const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error(`Open-Meteo historical archive returned HTTP ${response.status}.`);
+    return {
+      period: '2015–2024',
+      methodology: 'Daily mean temperatures averaged by calendar month from the historical archive.',
+      months: summarizeHistoricalAverages(await response.json()),
+      source: 'Open-Meteo Historical Weather API',
+      sourceUrl: 'https://open-meteo.com/en/docs/historical-weather-api'
+    };
+  });
+}
 
 async function searchPublicSources(question) {
   const query = question.slice(0, 500);
@@ -420,15 +464,116 @@ app.get('/api/health', (req, res) => {
     app: 'Nilgiri Smart Tourism API',
     timestamp: new Date().toISOString(),
     emailConfigured: EMAIL_CONFIGURED,
+    emailProviderStatus,
+    googleBrowserConfigured: Boolean(googleMobileAuthClient),
     paymentsConfigured: razorpayConfigured()
   });
+});
+
+app.get('/api/climate/locations', (req, res) => {
+  res.json({ locations: CLIMATE_LOCATIONS.map(({ id, name }) => ({ id, name })) });
+});
+
+app.get('/api/climate/averages', climateLimiter, async (req, res) => {
+  const location = resolveClimateLocation(req.query.location);
+  if (!location) {
+    return res.status(400).json({ message: 'Select a supported Nilgiris climate location.' });
+  }
+  try {
+    return res.json({
+      location: { id: location.id, name: location.name },
+      ...(await fetchClimateAverages(location))
+    });
+  } catch (error) {
+    console.error('Historical climate request failed:', error.message);
+    return res.status(502).json({ message: 'Historical climate averages are temporarily unavailable. Please try again later.' });
+  }
+});
+
+app.get('/api/climate', climateLimiter, async (req, res) => {
+  const location = resolveClimateLocation(req.query.location);
+  if (!location) {
+    return res.status(400).json({ message: 'Select a supported Nilgiris climate location.' });
+  }
+
+  const now = Date.now();
+  const records = getActiveClimateAdvisories(ensureDatabase().climateAdvisories, location.id, now);
+  let weather = null;
+  let weatherError = '';
+  try {
+    weather = await fetchClimateForecast(location);
+  } catch (error) {
+    weatherError = 'Live weather is temporarily unavailable. Check again later.';
+    console.error(`Weather request failed for ${location.id}:`, error.message);
+  }
+
+  return res.json({
+    location: { id: location.id, name: location.name },
+    weather,
+    weatherError,
+    advisories: records,
+    safety: assessTravelSafety(weather, records, now),
+    officialSources: [
+      { title: 'India Meteorological Department', url: 'https://mausam.imd.gov.in/' },
+      { title: 'Nilgiris District Administration', url: 'https://nilgiris.nic.in/' }
+    ]
+  });
+});
+
+app.get('/api/admin/climate-advisories', authenticateToken, requireAdmin, (req, res) => {
+  return res.json({ advisories: ensureDatabase().climateAdvisories });
+});
+
+app.post('/api/admin/climate-advisories', authenticateToken, requireAdmin, (req, res) => {
+  try {
+    const advisory = normalizeClimateAdvisory(req.body);
+    const data = ensureDatabase();
+    const stored = saveDatabase({
+      ...data,
+      climateAdvisories: [...data.climateAdvisories, advisory]
+    });
+    database.markInitialized();
+    broadcast('data-updated', { updatedAt: new Date().toISOString() });
+    return res.status(201).json({ advisory, advisories: stored.climateAdvisories });
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'The advisory could not be published.' });
+  }
+});
+
+app.put('/api/admin/climate-advisories/:id', authenticateToken, requireAdmin, (req, res) => {
+  const data = ensureDatabase();
+  const existing = data.climateAdvisories.find((item) => String(item.id) === req.params.id);
+  if (!existing) return res.status(404).json({ message: 'Climate advisory was not found.' });
+  try {
+    const advisory = normalizeClimateAdvisory(req.body, existing);
+    const stored = saveDatabase({
+      ...data,
+      climateAdvisories: data.climateAdvisories.map((item) => String(item.id) === req.params.id ? advisory : item)
+    });
+    database.markInitialized();
+    broadcast('data-updated', { updatedAt: new Date().toISOString() });
+    return res.json({ advisory, advisories: stored.climateAdvisories });
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'The advisory could not be updated.' });
+  }
+});
+
+app.delete('/api/admin/climate-advisories/:id', authenticateToken, requireAdmin, (req, res) => {
+  const data = ensureDatabase();
+  const advisories = data.climateAdvisories.filter((item) => String(item.id) !== req.params.id);
+  if (advisories.length === data.climateAdvisories.length) {
+    return res.status(404).json({ message: 'Climate advisory was not found.' });
+  }
+  const stored = saveDatabase({ ...data, climateAdvisories: advisories });
+  database.markInitialized();
+  broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  return res.json({ advisories: stored.climateAdvisories });
 });
 
 
 // ── Register with email + password ──────────────────────────────────────────
 app.post('/api/auth/register', guestLoginLimiter, (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
-  const password = String(req.body?.password || '');
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ message: 'Please provide a valid email address.' });
@@ -436,18 +581,7 @@ app.post('/api/auth/register', guestLoginLimiter, (req, res) => {
   if (email === ADMIN_EMAIL.toLowerCase()) {
     return res.status(400).json({ message: 'This email cannot be used for self-registration.' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ message: 'Password must be at least 6 characters.' });
-  }
-
-  const existing = getUserByEmail(email);
-  if (existing) {
-    return res.status(409).json({ message: 'An account with this email already exists. Please log in.' });
-  }
-
-  createUser(email, password);
-  const user = buildUser(email);
-  return res.status(201).json({ user, token: createToken(user), message: 'Account created successfully.' });
+  return res.status(410).json({ message: 'User accounts sign in with a one-time email code. No password account is needed.' });
 });
 
 // ── Login with email + password ──────────────────────────────────────────────
@@ -468,14 +602,7 @@ app.post('/api/auth/login', guestLoginLimiter, (req, res) => {
     return res.json({ user, token: createToken(user) });
   }
 
-  // Regular user login
-  const record = getUserByEmail(email);
-  if (!record || !verifyPassword(password, record.password_hash, record.salt)) {
-    return res.status(401).json({ message: 'Invalid email or password.' });
-  }
-
-  const user = buildUser(email);
-  return res.json({ user, token: createToken(user) });
+  return res.status(403).json({ message: 'User sign-in requires a one-time code sent to your email.' });
 });
 
 app.post('/api/auth/admin-login', guestLoginLimiter, (req, res) => {
@@ -495,22 +622,7 @@ app.post('/api/auth/admin-login', guestLoginLimiter, (req, res) => {
 });
 
 app.post('/api/auth/guest', guestLoginLimiter, (req, res) => {
-  if (EMAIL_CONFIGURED) {
-    return res.status(403).json({ message: 'Email OTP verification is required. Request a sign-in code instead.' });
-  }
-
-  const email = String(req.body?.email || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ message: 'Please provide a valid email address.' });
-  }
-
-  const user = {
-    email,
-    role: 'user',
-    verified: false,
-    loginTime: new Date().toISOString()
-  };
-  return res.json({ user, token: createToken(user) });
+  return res.status(403).json({ message: 'Email OTP verification is required. Request a sign-in code instead.' });
 });
 
 app.post('/api/chat', authenticateToken, chatLimiter, async (req, res) => {
@@ -583,8 +695,12 @@ app.get('/api/stream', (req, res) => {
 
   clients.add(res);
   res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', time: new Date().toISOString() })}\n\n`);
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) res.write(': keep-alive\n\n');
+  }, 25000);
 
   req.on('close', () => {
+    clearInterval(heartbeat);
     clients.delete(res);
   });
 });
@@ -592,20 +708,28 @@ app.get('/api/stream', (req, res) => {
 app.post('/api/auth/send-otp', otpLimiter, async (req, res) => {
   const { email } = req.body || {};
 
-  if (!email || !String(email).includes('@')) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
     return res.status(400).json({ message: 'Please provide a valid email address.' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return res.status(400).json({ message: 'Please provide a valid email address.' });
+  }
+  if (normalizedEmail === ADMIN_EMAIL.toLowerCase()) {
+    return res.status(403).json({ message: 'Administrator sign-in uses the private admin password.' });
   }
 
   if (!EMAIL_CONFIGURED) {
     return res.status(503).json({ message: 'Email OTP is unavailable because no email provider is configured.' });
   }
 
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const retryCheck = canResendOtp(otpStore.get(normalizedEmail));
+  const currentOtpState = database.getOtpState(normalizedEmail) || { record: null, sendLog: [] };
+  const retryCheck = canResendOtp(currentOtpState.record);
   if (!retryCheck.ok) {
     return res.status(429).json({ message: retryCheck.message });
   }
-  const sendCheck = registerSendAttempt(otpSendLog.get(normalizedEmail) || []);
+  const sendCheck = registerSendAttempt(currentOtpState.sendLog);
   if (!sendCheck.ok) {
     return res.status(429).json({ message: sendCheck.message });
   }
@@ -633,10 +757,10 @@ app.post('/api/auth/send-otp', otpLimiter, async (req, res) => {
       `
     });
 
-    otpSendLog.set(normalizedEmail, sendCheck.sendLog);
-    otpStore.set(normalizedEmail, record);
+    database.saveOtpState(normalizedEmail, record, sendCheck.sendLog);
     return res.json({ message: 'OTP sent successfully.', email: normalizedEmail });
   } catch (error) {
+    emailProviderStatus = 'error';
     console.error('Email send failed:', error.name === 'TimeoutError' ? 'Request timed out' : error.message);
     return res.status(502).json({ message: 'Failed to send OTP email. Please try again later.' });
   }
@@ -657,6 +781,9 @@ app.post('/api/auth/google', async (req, res) => {
     const payload = ticket.getPayload();
     if (!payload?.email || payload.email_verified !== true) {
       return res.status(401).json({ message: 'Google must verify your email before you can sign in.' });
+    }
+    if (String(payload.email).trim().toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      return res.status(403).json({ message: 'Administrator sign-in uses the private admin password.' });
     }
 
     const user = buildUser(payload.email);
@@ -746,6 +873,9 @@ app.get('/api/auth/google/mobile/callback', async (req, res) => {
     if (!payload?.email || payload.email_verified !== true) {
       throw new Error('Google did not verify the account email.');
     }
+    if (String(payload.email).trim().toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      throw new Error('Administrator sign-in uses the private admin password.');
+    }
 
     for (const [existingTicket, result] of googleMobileAuthTickets) {
       if (result.expiresAt <= Date.now()) googleMobileAuthTickets.delete(existingTicket);
@@ -796,12 +926,16 @@ app.post('/api/auth/verify-otp', verifyOtpLimiter, (req, res) => {
   }
 
   const normalizedEmail = String(email).trim().toLowerCase();
-  const result = verifyOtpRecord(otpStore.get(normalizedEmail), otp);
+  if (normalizedEmail === ADMIN_EMAIL.toLowerCase()) {
+    return res.status(403).json({ message: 'Administrator sign-in uses the private admin password.' });
+  }
+  const otpState = database.getOtpState(normalizedEmail);
+  const result = verifyOtpRecord(otpState?.record, otp);
 
   if (result.consumed) {
-    otpStore.delete(normalizedEmail);
-  } else if (result.record) {
-    otpStore.set(normalizedEmail, result.record);
+    database.saveOtpState(normalizedEmail, null, otpState?.sendLog || []);
+  } else if (result.record && otpState) {
+    database.saveOtpState(normalizedEmail, result.record, otpState.sendLog);
   }
 
   if (!result.ok) {
@@ -853,7 +987,11 @@ app.post('/api/data', authenticateToken, requireAdmin, (req, res) => {
   if (!Object.keys(defaultState).every((collection) => Array.isArray(payload[collection]))) {
     return res.status(400).json({ message: 'All app data collections must be arrays.' });
   }
-  const stored = saveDatabase(payload);
+  const currentData = ensureDatabase();
+  const stored = saveDatabase({
+    ...payload,
+    climateAdvisories: currentData.climateAdvisories
+  });
   database.markInitialized();
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
   res.json({ message: 'Data saved successfully.', data: stored });
@@ -1368,6 +1506,16 @@ function startServer() {
     console.log(`Nilgiri Smart Tourism backend running on http://localhost:${PORT}`);
     if (!SMTP_CONFIGURED) {
       console.log('Gmail SMTP not configured.');
+    } else {
+      transporter.verify()
+        .then(() => {
+          emailProviderStatus = 'ready';
+          console.log('Gmail SMTP connection verified.');
+        })
+        .catch((error) => {
+          emailProviderStatus = 'error';
+          console.error('Gmail SMTP verification failed:', error.message);
+        });
     }
     if (!EMAIL_CONFIGURED) {
       console.log('Email delivery is unavailable. Set RESEND_API_KEY and RESEND_FROM_EMAIL, or configure SMTP_USER and SMTP_PASS.');
@@ -1380,7 +1528,7 @@ function startServer() {
   });
 }
 
-module.exports = { app, startServer };
+module.exports = { app, closeDatabase: () => database.close(), startServer };
 
 if (require.main === module) {
   startServer();

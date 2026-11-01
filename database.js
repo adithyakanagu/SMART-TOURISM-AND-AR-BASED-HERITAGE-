@@ -10,7 +10,8 @@ const collections = [
   'orders',
   'tourismSpots',
   'businesses',
-  'forms'
+  'forms',
+  'climateAdvisories'
 ];
 
 const emptyState = Object.fromEntries(collections.map((name) => [name, []]));
@@ -25,6 +26,9 @@ function createDatabase(databasePath, legacyPath) {
   database.pragma('journal_mode = WAL');
   database.pragma('foreign_keys = ON');
   database.exec('CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  database.exec('CREATE TABLE IF NOT EXISTS auth_otp_state (email TEXT PRIMARY KEY, payload TEXT NOT NULL)');
+  const readOtpState = database.prepare('SELECT payload FROM auth_otp_state WHERE email = ?');
+  const writeOtpState = database.prepare('INSERT OR REPLACE INTO auth_otp_state (email, payload) VALUES (?, ?)');
 
   for (const collection of collections) {
     database.exec(`CREATE TABLE IF NOT EXISTS ${collection} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`);
@@ -78,6 +82,13 @@ function createDatabase(databasePath, legacyPath) {
     replace(state) {
       replaceTransaction(state || emptyState);
       return read();
+    },
+    getOtpState(email) {
+      const row = readOtpState.get(email);
+      return row ? JSON.parse(row.payload) : null;
+    },
+    saveOtpState(email, record, sendLog) {
+      writeOtpState.run(email, JSON.stringify({ record, sendLog }));
     },
     isInitialized() {
       return metadata.get('initialized')?.value === '1';

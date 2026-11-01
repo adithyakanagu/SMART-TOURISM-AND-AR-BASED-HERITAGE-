@@ -1,10 +1,53 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../data/api';
 import { addBusinessEntry, addProduct, addTaxi, addTourismPlace, addUserForm, confirmOrderPayment, loadAppData, replyToInquiry, saveAppData } from '../data/store';
 import { defaultHotelImages, defaultProductImages } from '../data/shoppingImages';
-import { FaArrowLeft, FaBox, FaHotel, FaCar, FaEnvelope, FaCheckCircle, FaMapMarkerAlt, FaBuilding, FaReceipt, FaClipboardList, FaChartBar } from 'react-icons/fa';
+import { FaArrowLeft, FaBox, FaHotel, FaCar, FaEnvelope, FaCheckCircle, FaMapMarkerAlt, FaBuilding, FaReceipt, FaClipboardList, FaChartBar, FaCloudSun, FaEdit, FaTrash } from 'react-icons/fa';
 import './AdminDashboard.css';
+
+const climateLocations = [
+  { id: 'all', name: 'All Nilgiris' },
+  { id: 'ooty', name: 'Ooty (Udhagamandalam)' },
+  { id: 'coonoor', name: 'Coonoor' },
+  { id: 'kotagiri', name: 'Kotagiri' },
+  { id: 'gudalur', name: 'Gudalur' },
+  { id: 'pandalur', name: 'Pandalur' },
+  { id: 'kundah', name: 'Kundah' }
+];
+const climateAdvisoryTypes = [
+  { value: 'assessment', label: 'General safety assessment' },
+  { value: 'heavy-rain', label: 'Heavy rainfall' },
+  { value: 'thunderstorm', label: 'Thunderstorm' },
+  { value: 'dense-fog', label: 'Dense fog' },
+  { value: 'strong-winds', label: 'Strong winds' },
+  { value: 'flooding', label: 'Flooding' },
+  { value: 'landslide', label: 'Landslide' },
+  { value: 'road-closure', label: 'Road closure' },
+  { value: 'travel-advisory', label: 'Travel advisory' }
+];
+
+const toLocalDateTime = (value) => {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
+const getClimateDraft = () => ({
+  id: '',
+  locationId: 'ooty',
+  status: 'caution',
+  type: 'travel-advisory',
+  title: '',
+  message: '',
+  precautions: '',
+  recommendedPeriod: '',
+  sourceTitle: '',
+  sourceUrl: '',
+  expiresAt: toLocalDateTime(Date.now() + 6 * 60 * 60 * 1000),
+  confirmedOfficial: false
+});
 
 const tabs = [
   { key: 'products', label: 'Products', icon: FaBox },
@@ -14,6 +57,7 @@ const tabs = [
   { key: 'businesses', label: 'Businesses', icon: FaBuilding },
   { key: 'orders', label: 'Orders', icon: FaReceipt },
   { key: 'forms', label: 'User Forms', icon: FaClipboardList },
+  { key: 'climate', label: 'Climate Safety', icon: FaCloudSun },
   { key: 'analytics', label: 'Analytics', icon: FaChartBar },
   { key: 'queries', label: 'Queries', icon: FaEnvelope }
 ];
@@ -54,7 +98,7 @@ const adminTalukMapRegions = [
 
 function AdminDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('products');
   const [data, setData] = useState(loadAppData());
   const [replyDrafts, setReplyDrafts] = useState({});
@@ -66,6 +110,12 @@ function AdminDashboard() {
   const [newForm, setNewForm] = useState(emptyForm);
   const [imageErrors, setImageErrors] = useState({});
   const [paymentActionId, setPaymentActionId] = useState(null);
+  const [climateDraft, setClimateDraft] = useState(getClimateDraft);
+  const [climateAdvisories, setClimateAdvisories] = useState([]);
+  const [climateLoading, setClimateLoading] = useState(false);
+  const [climateSaving, setClimateSaving] = useState(false);
+  const [climateError, setClimateError] = useState('');
+  const [climateMessage, setClimateMessage] = useState('');
 
   useEffect(() => {
     if (!user || user.email !== 'adithya01022007@gmail.com') {
@@ -78,6 +128,37 @@ function AdminDashboard() {
     window.addEventListener('arSmartTourismDataUpdated', syncAppData);
     return () => window.removeEventListener('arSmartTourismDataUpdated', syncAppData);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'climate' || !token) return undefined;
+    let active = true;
+    const controller = new AbortController();
+    setClimateLoading(true);
+    setClimateError('');
+    fetch(`${API_BASE_URL}/api/admin/climate-advisories`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal
+    })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Could not load climate advisories.');
+        return result;
+      })
+      .then((result) => {
+        if (active) setClimateAdvisories(result.advisories || []);
+      })
+      .catch((error) => {
+        if (active && error.name !== 'AbortError') setClimateError(error.message || 'Could not load climate advisories.');
+      })
+      .finally(() => {
+        if (active) setClimateLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeTab, token]);
 
   const summary = useMemo(() => ({
     products: data.products.length,
@@ -251,6 +332,65 @@ function AdminDashboard() {
     }
   };
 
+  const saveClimateAdvisory = async (event) => {
+    event.preventDefault();
+    setClimateSaving(true);
+    setClimateError('');
+    setClimateMessage('');
+    try {
+      const { id, ...draft } = climateDraft;
+      const response = await fetch(`${API_BASE_URL}/api/admin/climate-advisories${id ? `/${encodeURIComponent(id)}` : ''}`, {
+        method: id ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...draft,
+          expiresAt: new Date(draft.expiresAt).toISOString()
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Could not save this advisory.');
+      setClimateAdvisories(result.advisories || []);
+      setClimateDraft(getClimateDraft());
+      setClimateMessage(id ? 'Climate advisory updated and published.' : 'Climate advisory published.');
+    } catch (error) {
+      setClimateError(error.message || 'Could not save this advisory.');
+    } finally {
+      setClimateSaving(false);
+    }
+  };
+
+  const editClimateAdvisory = (advisory) => {
+    setClimateDraft({
+      ...advisory,
+      expiresAt: toLocalDateTime(advisory.expiresAt),
+      confirmedOfficial: false
+    });
+    setClimateError('');
+    setClimateMessage('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const deleteClimateAdvisory = async (advisory) => {
+    if (!window.confirm(`Remove "${advisory.title}" from current travel advisories?`)) return;
+    setClimateError('');
+    setClimateMessage('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/climate-advisories/${encodeURIComponent(advisory.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Could not remove this advisory.');
+      setClimateAdvisories(result.advisories || []);
+      setClimateMessage('Climate advisory removed.');
+    } catch (error) {
+      setClimateError(error.message || 'Could not remove this advisory.');
+    }
+  };
+
   const updateInquiryStatus = (id, status) => {
     persist({
       ...data,
@@ -336,6 +476,95 @@ function AdminDashboard() {
             </button>
           ))}
         </nav>
+
+        {activeTab === 'climate' && (
+          <section className="admin-panel">
+            <h2>Climate Safety & Travel Advisories</h2>
+            <p className="admin-help-text">Publish verified, source-linked travel information. Forecast data is retrieved automatically and cannot be edited here; a missing advisory does not mean there are no official warnings.</p>
+            {climateError && <p className="climate-admin-feedback error" role="alert">{climateError}</p>}
+            {climateMessage && <p className="climate-admin-feedback success" role="status">{climateMessage}</p>}
+            <form className="admin-form climate-admin-form" onSubmit={saveClimateAdvisory}>
+              <label>
+                Destination
+                <select required value={climateDraft.locationId} onChange={(event) => setClimateDraft({ ...climateDraft, locationId: event.target.value })}>
+                  {climateLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Assessment
+                <select required value={climateDraft.status} onChange={(event) => setClimateDraft({ ...climateDraft, status: event.target.value })}>
+                  <option value="safe">Safe to visit</option>
+                  <option value="caution">Caution</option>
+                  <option value="not-recommended">Not recommended</option>
+                </select>
+              </label>
+              <label>
+                Advisory type
+                <select required value={climateDraft.type} onChange={(event) => setClimateDraft({ ...climateDraft, type: event.target.value })}>
+                  {climateAdvisoryTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+              </label>
+              <label>
+                Title
+                <input required maxLength="120" value={climateDraft.title} onChange={(event) => setClimateDraft({ ...climateDraft, title: event.target.value })} placeholder="e.g. Temporary road closure near destination" />
+              </label>
+              <label className="climate-admin-wide">
+                Advisory details
+                <textarea required maxLength="1000" value={climateDraft.message} onChange={(event) => setClimateDraft({ ...climateDraft, message: event.target.value })} placeholder="Describe the verified warning or assessment" />
+              </label>
+              <label className="climate-admin-wide">
+                Precautions
+                <textarea maxLength="1000" value={climateDraft.precautions} onChange={(event) => setClimateDraft({ ...climateDraft, precautions: event.target.value })} placeholder="Recommended actions for visitors" />
+              </label>
+              <label>
+                Recommended visiting period (optional)
+                <input maxLength="120" value={climateDraft.recommendedPeriod} onChange={(event) => setClimateDraft({ ...climateDraft, recommendedPeriod: event.target.value })} placeholder="e.g. October to March" />
+              </label>
+              <label>
+                Source name
+                <input required maxLength="120" value={climateDraft.sourceTitle} onChange={(event) => setClimateDraft({ ...climateDraft, sourceTitle: event.target.value })} placeholder="e.g. Nilgiris District Administration" />
+              </label>
+              <label className="climate-admin-wide">
+                Official source URL (.gov.in or .nic.in)
+                <input required type="url" value={climateDraft.sourceUrl} onChange={(event) => setClimateDraft({ ...climateDraft, sourceUrl: event.target.value })} placeholder="https://..." />
+              </label>
+              <label>
+                Expires at
+                <input required type="datetime-local" value={climateDraft.expiresAt} onChange={(event) => setClimateDraft({ ...climateDraft, expiresAt: event.target.value })} />
+              </label>
+              <label className="form-checkbox climate-admin-confirm climate-admin-wide">
+                <input required type="checkbox" checked={climateDraft.confirmedOfficial} onChange={(event) => setClimateDraft({ ...climateDraft, confirmedOfficial: event.target.checked })} />
+                I verified this information against the linked official source and confirm it is current.
+              </label>
+              <div className="climate-admin-actions climate-admin-wide">
+                <button type="submit" className="admin-submit-btn" disabled={climateSaving}>
+                  {climateSaving ? 'Saving…' : climateDraft.id ? 'Update & publish advisory' : 'Publish advisory'}
+                </button>
+                {climateDraft.id && <button type="button" className="climate-admin-cancel" onClick={() => setClimateDraft(getClimateDraft())}>Cancel edit</button>}
+              </div>
+            </form>
+
+            <div className="climate-admin-list">
+              <h3>Published advisories</h3>
+              {climateLoading ? <p>Loading advisories…</p> : climateAdvisories.length === 0 ? <p>No advisories have been published.</p> : climateAdvisories.map((advisory) => {
+                const expired = Date.parse(advisory.expiresAt) <= Date.now();
+                return (
+                  <article className="climate-admin-item" key={advisory.id}>
+                    <div className="climate-admin-item-copy">
+                      <strong>{advisory.title}</strong>
+                      <span>{climateLocations.find((location) => location.id === advisory.locationId)?.name || advisory.locationId} · {advisory.status.replace('-', ' ')} · {expired ? 'Expired' : 'Expires'} {new Date(advisory.expiresAt).toLocaleString()}</span>
+                      <span>Updated {new Date(advisory.publishedAt).toLocaleString()} · Source: {advisory.sourceTitle}</span>
+                    </div>
+                    <div className="climate-admin-item-actions">
+                      <button type="button" onClick={() => editClimateAdvisory(advisory)} aria-label={`Edit ${advisory.title}`}><FaEdit /> Edit</button>
+                      <button type="button" onClick={() => deleteClimateAdvisory(advisory)} aria-label={`Remove ${advisory.title}`}><FaTrash /> Remove</button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {activeTab === 'analytics' && (
           <section className="admin-panel">

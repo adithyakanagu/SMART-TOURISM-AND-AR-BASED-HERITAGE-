@@ -14,6 +14,7 @@ import {
   FaCheckCircle,
   FaRobot
 } from 'react-icons/fa';
+import { ClimateSafetyCard } from './Climate';
 import { loadAppData } from '../data/store';
 import './SmartTourism.css';
 
@@ -397,6 +398,8 @@ function SmartTourism() {
               </div>
 
               {selectedPlace.accessNote && <div className="access-alert">⚠️ {selectedPlace.accessNote}</div>}
+
+              <ClimateSafetyCard location={selectedPlace.taluk} destinationName={selectedPlace.name} />
 
               <div className="detail-description">
                 <h3>About this place</h3>

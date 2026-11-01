@@ -7,10 +7,10 @@ import { Browser } from '@capacitor/browser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { ADMIN_EMAIL } from '../data/store';
-import { FaEnvelope, FaLock, FaArrowRight, FaGoogle, FaEye, FaEyeSlash, FaUserPlus, FaSignInAlt } from 'react-icons/fa';
+import { API_BASE_URL } from '../data/api';
+import { FaEnvelope, FaLock, FaArrowRight, FaGoogle, FaEye, FaEyeSlash } from 'react-icons/fa';
 import './Login.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' && window.location.protocol.startsWith('http') ? '' : 'http://localhost:5000');
 const googleClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
 const teaEstateImage = `${process.env.PUBLIC_URL}/shopping/nilgiri-tea-estate.webp`;
 const isAndroidWebView = typeof window !== 'undefined' &&
@@ -27,18 +27,17 @@ const parseResponseJson = async (response) => {
 };
 
 function Login() {
-  const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const isAdminEmail = email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-  const switchMode = (m) => { setMode(m); setError(''); setPassword(''); setConfirmPassword(''); };
 
   const finishLogin = (data) => {
     login(data.user.email, data.user.role, data.token, data.user.verified);
@@ -65,31 +64,79 @@ function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const requestOtp = async (normalizedEmail) => {
+    const response = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: normalizedEmail }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const data = await parseResponseJson(response);
+    if (!response.ok) throw new Error(data.message || 'Could not send a sign-in code.');
+    setOtpSent(true);
+    setOtp('');
+    setInfo(data.message || 'A sign-in code was sent to your email.');
+  };
+
   const handleLogin = async (e) => {
-    e.preventDefault(); setError('');
-    if (!email.trim() || !password) { setError('Please enter your email and password.'); return; }
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (isAdminEmail && !password) {
+      setError('Please enter the administrator password.');
+      return;
+    }
+    if (!isAdminEmail && otpSent && !/^\d{6}$/.test(otp.trim())) {
+      setError('Enter the 6-digit code from your email.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: AbortSignal.timeout(15000) });
+      if (!isAdminEmail && !otpSent) {
+        await requestOtp(normalizedEmail);
+        return;
+      }
+      const res = isAdminEmail
+        ? await fetch(`${API_BASE_URL}/api/auth/admin-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: normalizedEmail, password }),
+          signal: AbortSignal.timeout(15000)
+        })
+        : await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: normalizedEmail, otp: otp.trim() }),
+          signal: AbortSignal.timeout(15000)
+        });
       const data = await parseResponseJson(res);
-      if (!res.ok) throw new Error(data.message || 'Login failed. Please check your credentials.');
+      if (!res.ok) throw new Error(data.message || (isAdminEmail ? 'Administrator sign-in failed.' : 'That code could not be verified.'));
       finishLogin(data);
-    } catch (err) { setError(err.message || 'Login failed.'); }
+    } catch (err) {
+      setError(err.name === 'TimeoutError' || err.name === 'AbortError'
+        ? 'The sign-in service timed out. Check your connection and try again.'
+        : err.message || 'Sign-in failed.');
+    }
     finally { setLoading(false); }
   };
 
-  const handleRegister = async (e) => {
-    e.preventDefault(); setError('');
-    if (isAdminEmail) { setError('This email cannot be registered.'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
-    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+  const handleResendOtp = async () => {
     setLoading(true);
+    setError('');
+    setInfo('');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }), signal: AbortSignal.timeout(15000) });
-      const data = await parseResponseJson(res);
-      if (!res.ok) throw new Error(data.message || 'Registration failed.');
-      finishLogin(data);
-    } catch (err) { setError(err.message || 'Registration failed.'); }
+      await requestOtp(email.trim().toLowerCase());
+    } catch (err) {
+      setError(err.name === 'TimeoutError' || err.name === 'AbortError'
+        ? 'The sign-in service timed out. Try again shortly.'
+        : err.message || 'Could not resend the code.');
+    }
     finally { setLoading(false); }
   };
 
@@ -131,43 +178,86 @@ function Login() {
           <p className="login-subtitle">AR Based Heritage</p>
         </div>
 
-        <div className="auth-tabs">
-          <button id="tab-login" className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => switchMode('login')} type="button"><FaSignInAlt /> Sign In</button>
-          <button id="tab-register" className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => switchMode('register')} type="button"><FaUserPlus /> Create Account</button>
-        </div>
-
         <div className="login-form">
           <AnimatePresence mode="wait">
-            <motion.form key={mode} onSubmit={mode === 'login' ? handleLogin : handleRegister} initial={{ opacity: 0, x: mode === 'login' ? -20 : 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            <motion.form key="sign-in" onSubmit={handleLogin} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
               <div className="input-group">
                 <FaEnvelope className="input-icon" />
-                <input id="auth-email" type="email" placeholder="Enter your email address" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} required autoComplete="email" className="login-input" />
+                <input
+                  id="auth-email"
+                  type="email"
+                  placeholder="Enter your email address"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setOtp('');
+                    setOtpSent(false);
+                    setPassword('');
+                    setError('');
+                    setInfo('');
+                  }}
+                  disabled={otpSent && !isAdminEmail}
+                  required
+                  autoComplete="email"
+                  className="login-input"
+                />
               </div>
 
-              {mode === 'login' && isAdminEmail && <p className="otp-message">Admin account — enter your private admin password.</p>}
-
-              <div className="input-group">
-                <FaLock className="input-icon" />
-                <input id="auth-password" type={showPassword ? 'text' : 'password'} placeholder={mode === 'login' ? 'Enter your password' : 'Create a password (min 6 chars)'} value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} required minLength={mode === 'register' ? 6 : undefined} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className="login-input" />
-                <button type="button" className="password-toggle" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <FaEyeSlash /> : <FaEye />}</button>
-              </div>
-
-              {mode === 'register' && (
+              {isAdminEmail ? (
                 <div className="input-group">
                   <FaLock className="input-icon" />
-                  <input id="auth-confirm-password" type={showPassword ? 'text' : 'password'} placeholder="Confirm your password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }} required autoComplete="new-password" className="login-input" />
+                  <input
+                    id="auth-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter administrator password"
+                    value={password}
+                    onChange={(event) => { setPassword(event.target.value); setError(''); }}
+                    required
+                    autoComplete="current-password"
+                    className="login-input"
+                  />
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword((value) => !value)} tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
                 </div>
+              ) : otpSent ? (
+                <>
+                  <div className="input-group">
+                    <FaLock className="input-icon" />
+                    <input
+                      id="auth-otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="6-digit email code"
+                      value={otp}
+                      onChange={(event) => { setOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                      required
+                      className="login-input"
+                    />
+                  </div>
+                  <p className="otp-message" role="status">{info || 'Enter the 6-digit code sent to your email. It expires in 5 minutes.'}</p>
+                </>
+              ) : (
+                <p className="otp-message">We’ll email you a one-time sign-in code. No account password is needed.</p>
               )}
 
               {error && <div className="error-message" role="alert">{error}</div>}
+              {info && !otpSent && <div className="otp-message" role="status">{info}</div>}
 
               <motion.button id="auth-submit-btn" type="submit" className="login-button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={loading}>
-                {loading ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? (isAdminEmail ? 'Admin Sign In' : 'Sign In') : 'Create Account'} <FaArrowRight />
+                {loading
+                  ? (isAdminEmail ? 'Signing in…' : otpSent ? 'Verifying code…' : 'Sending code…')
+                  : isAdminEmail ? 'Admin Sign In' : otpSent ? 'Verify code' : 'Send sign-in code'} <FaArrowRight />
               </motion.button>
 
-              <p className="switch-mode-hint">
-                {mode === 'login' ? <>New here? <button type="button" className="link-button" onClick={() => switchMode('register')}>Create a free account</button></> : <>Already have an account? <button type="button" className="link-button" onClick={() => switchMode('login')}>Sign in</button></>}
-              </p>
+              {otpSent && !isAdminEmail && (
+                <div className="otp-actions">
+                  <button type="button" className="back-button" onClick={handleResendOtp} disabled={loading}>Resend code</button>
+                  <button type="button" className="back-button" onClick={() => { setOtpSent(false); setOtp(''); setInfo(''); setError(''); }} disabled={loading}>Use a different email</button>
+                </div>
+              )}
             </motion.form>
           </AnimatePresence>
 

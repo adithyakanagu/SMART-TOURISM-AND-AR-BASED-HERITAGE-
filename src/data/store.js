@@ -1,3 +1,5 @@
+import { API_BASE_URL } from './api';
+
 const ADMIN_EMAIL_VALUE = 'adithya01022007@gmail.com';
 
 const defaultProducts = [
@@ -919,4 +921,3 @@ export async function createPendingOrder(params) {
   }
   return result.order || result;
 }
-import { API_BASE_URL } from './api';

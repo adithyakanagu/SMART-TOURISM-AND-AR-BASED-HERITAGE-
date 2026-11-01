@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FaRedoAlt } from 'react-icons/fa';
 import './PullToRefresh.css';
 
@@ -9,7 +9,7 @@ function PullToRefresh({ onRefresh, disabled = false, children }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  const runRefresh = async () => {
+  const runRefresh = useCallback(async () => {
     if (refreshing || disabled) return;
     setRefreshing(true);
     setError('');
@@ -21,7 +21,7 @@ function PullToRefresh({ onRefresh, disabled = false, children }) {
       setRefreshing(false);
       setOffset(0);
     }
-  };
+  }, [disabled, onRefresh, refreshing]);
 
   useEffect(() => {
     if (disabled) return undefined;
@@ -59,7 +59,7 @@ function PullToRefresh({ onRefresh, disabled = false, children }) {
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchend', onTouchEnd);
     };
-  }, [disabled, offset, refreshing, onRefresh]);
+  }, [disabled, offset, refreshing, runRefresh]);
 
   return (
     <div className="ptr-root">

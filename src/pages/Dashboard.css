@@ -454,7 +454,7 @@
 /* ── Tab bar ── */
 .dashboard-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   width: min(900px, 100%);
   margin: 0 auto 24px;
@@ -1114,7 +1114,7 @@
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     left: 12px;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 3px;
     width: auto;
     margin: 0;
@@ -1304,6 +1304,180 @@
   padding: 20px;
 }
 
+.dashboard-modal-backdrop .epass-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  width: min(900px, 100%);
+  height: min(780px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 16px;
+  border: 1px solid rgba(25, 67, 46, 0.12);
+  border-radius: 18px;
+  color: #24443a;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(8, 34, 21, 0.24);
+}
+
+.epass-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.epass-panel-header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.epass-panel-header strong {
+  color: #18392f;
+  font-size: 1.05rem;
+}
+
+.epass-panel-header span {
+  color: #698077;
+  font-size: 0.82rem;
+}
+
+.epass-panel-header > button {
+  border: 0;
+  color: #557067;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.epass-frame {
+  width: 100%;
+  min-height: 0;
+  border: 1px solid #e2e8df;
+  border-radius: 12px;
+  background: #f8faf6;
+}
+
+.epass-open-link {
+  color: #176d47;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dashboard-notifications-page {
+  display: grid;
+  gap: 14px;
+  width: min(900px, 100%);
+  min-height: 230px;
+  margin: 0 auto 24px;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid rgba(35, 67, 51, 0.12);
+  border-radius: 20px;
+  background: #fffefa;
+  box-shadow: 0 10px 28px rgba(24, 49, 36, 0.08);
+}
+
+.dashboard-notifications-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e4eee7;
+}
+
+.dashboard-notifications-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.dashboard-notifications-heading span:first-child {
+  color: #1d6848;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-notifications-heading h2 {
+  margin: 0;
+  color: #18392f;
+  font-size: 1.35rem;
+}
+
+.dashboard-notifications-count {
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #176d47;
+  background: #edf6ef;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.dashboard-notification-list {
+  display: grid;
+}
+
+.dashboard-notification-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 13px 4px;
+  border-bottom: 1px solid #edf3ee;
+}
+
+.dashboard-notification-row:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-notification-row .notification-dot {
+  margin-top: 6px;
+}
+
+.dashboard-notification-open {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: #24443a;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dashboard-notification-open strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+
+.dashboard-notification-open small {
+  color: #698077;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.dashboard-notification-delete {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #f0d7d4;
+  border-radius: 10px;
+  color: #a63b32;
+  background: #fff8f7;
+  cursor: pointer;
+}
+
+.dashboard-notification-delete:hover {
+  color: #fff;
+  background: #b83c32;
+}
+
 @media (max-width: 768px) {
   .dashboard-modal-backdrop {
     padding: max(16px, env(safe-area-inset-top, 0px)) 16px
@@ -1313,5 +1487,16 @@
   .dashboard-modal-backdrop .chat-panel {
     height: min(620px, calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
     max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+
+  .dashboard-modal-backdrop .epass-panel {
+    height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    padding: 12px;
+  }
+
+  .dashboard-notifications-page {
+    padding: 17px;
+    border-radius: 17px;
   }
 }

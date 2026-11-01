@@ -32,6 +32,37 @@
   gap: 10px;
 }
 
+.climate-carousel-epass {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin-left: auto;
+  padding: 0 13px;
+  border: 1px solid #cfe0d1;
+  border-radius: 999px;
+  color: #176d47;
+  background: #f4fbf4;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.climate-carousel-epass small {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: #176d47;
+  font-size: 0.65rem;
+  line-height: 1.2;
+}
+
+.climate-carousel-epass:hover {
+  border-color: #1d6848;
+  background: #eaf7ed;
+}
+
 .climate-carousel-arrow {
   display: grid;
   width: 36px;
@@ -104,6 +135,18 @@
 
   .climate-carousel-navigation {
     gap: 7px;
+  }
+
+  .climate-carousel-epass {
+    gap: 5px;
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 0.7rem;
+  }
+
+  .climate-carousel-epass small {
+    padding: 3px 5px;
+    font-size: 0.6rem;
   }
 
   .climate-carousel-arrow {

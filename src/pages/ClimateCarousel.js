@@ -4,7 +4,7 @@ import { FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import Climate, { ClimateOverview } from './Climate';
 import './ClimateCarousel.css';
 
-function ClimateCarousel({ activeTab }) {
+function ClimateCarousel({ activeTab, onOpenEpass }) {
   const [{ activeSlide, direction }, setCarouselState] = useState({ activeSlide: 0, direction: 1 });
   const [locationId, setLocationId] = useState('ooty');
   const touchStart = useRef(null);
@@ -63,6 +63,10 @@ function ClimateCarousel({ activeTab }) {
           <strong>Climate & travel safety</strong>
           <span>{activeSlide === 0 ? 'At a glance' : 'Forecast, advisories & history'}</span>
         </div>
+        <button type="button" className="climate-carousel-epass" onClick={onOpenEpass}>
+          <span>TN ePass</span>
+          <small>Apply</small>
+        </button>
         <div className="climate-carousel-navigation">
           <button type="button" className="climate-carousel-arrow" onClick={() => goToSlide(activeSlide - 1)} disabled={activeSlide === 0} aria-label="Show climate overview">
             <FaArrowLeft aria-hidden="true" />

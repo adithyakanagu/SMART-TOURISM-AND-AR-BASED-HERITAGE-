@@ -35,7 +35,8 @@ import {
   FaMapMarkerAlt,
   FaClock,
   FaExternalLinkAlt as FaLink,
-  FaCloudSun
+  FaCloudSun,
+  FaTrash
 } from 'react-icons/fa';
 import './Dashboard.css';
 import ClimateCarousel from './ClimateCarousel';
@@ -81,8 +82,30 @@ const TABS = [
   { id: 'mall', label: 'Shopping Mall', icon: FaShoppingCart },
   { id: 'bookings', label: 'Hotel & Taxi', icon: FaHotel },
   { id: 'businesses', label: 'Businesses', icon: FaStore },
+  { id: 'notifications', label: 'Notifications', icon: FaBell },
   { id: 'mail', label: 'Mail', icon: FaEnvelope }
 ];
+
+function NotificationList({ items, onOpen, onDelete }) {
+  if (!items.length) return <p className="notification-empty">You have no new notifications.</p>;
+
+  return (
+    <div className="dashboard-notification-list">
+      {items.map((item) => (
+        <article className="dashboard-notification-row" key={item.id}>
+          <span className={`notification-dot ${item.tone}`} aria-hidden="true" />
+          <button type="button" className="dashboard-notification-open" onClick={() => onOpen(item)}>
+            <strong>{item.title}</strong>
+            <small>{item.message}</small>
+          </button>
+          <button type="button" className="dashboard-notification-delete" onClick={() => onDelete(item.id)} aria-label={`Delete notification: ${item.title}`} title="Delete notification">
+            <FaTrash aria-hidden="true" />
+          </button>
+        </article>
+      ))}
+    </div>
+  );
+}
 
 function BusinessCard({ business, onEnquire }) {
   return (
@@ -151,6 +174,7 @@ function Dashboard() {
   const [messageSending, setMessageSending] = useState(false);
   const [activeInboxTab, setActiveInboxTab] = useState('requests');
   const [activeDashboardTab, setActiveDashboardTab] = useState('explore');
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState([]);
   const [formAnswers, setFormAnswers] = useState({});
   const [booking, setBooking] = useState(emptyBooking);
   const [activeOverlay, setActiveOverlay] = useState(null);
@@ -263,13 +287,33 @@ function Dashboard() {
     ...myForms.filter((form) => form.status === 'Unread').map((form) => ({ id: form.id, title: form.title, message: 'New questionnaire from admin', tone: 'new' })),
     ...myRequests.filter((request) => request.reply).slice(0, 5).map((request) => ({ id: `reply-${request.id}`, title: request.subject, message: 'Admin replied to your request', tone: 'reply' })),
     ...myRequests.filter((request) => request.status === 'Pending').slice(0, 5).map((request) => ({ id: `pending-${request.id}`, title: request.subject, message: 'Request is being reviewed', tone: 'pending' }))
-  ].filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index), [myForms, myRequests]);
+  ].filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index)
+    .filter((item) => !dismissedNotificationIds.includes(String(item.id))), [myForms, myRequests, dismissedNotificationIds]);
   const myOrders = useMemo(
     () => (data.orders || []).filter((order) => order.userEmail?.toLowerCase() === user?.email?.toLowerCase()),
     [data.orders, user?.email]
   );
 
   const handleModuleClick = (path) => { navigate(path); };
+
+  useEffect(() => {
+    const storageKey = `arTourismDismissedNotifications:${(user?.email || '').toLowerCase()}`;
+    const storedIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    setDismissedNotificationIds(Array.isArray(storedIds) ? storedIds.map(String) : []);
+  }, [user?.email]);
+
+  const dismissNotification = (notificationId) => {
+    const storageKey = `arTourismDismissedNotifications:${(user?.email || '').toLowerCase()}`;
+    const nextIds = [...new Set([...dismissedNotificationIds, String(notificationId)])];
+    localStorage.setItem(storageKey, JSON.stringify(nextIds));
+    setDismissedNotificationIds(nextIds);
+  };
+
+  const openNotification = (item) => {
+    setActiveOverlay(null);
+    setActiveInboxTab(item.tone === 'new' ? 'forms' : 'requests');
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  };
 
   const handleProfileSave = (event) => {
     event.preventDefault();
@@ -465,22 +509,13 @@ function Dashboard() {
               <div className="notification-panel-header">
                 <strong id="notifications-modal-title">Notifications</strong>
                 <div className="dashboard-modal-actions">
-                  <button type="button" onClick={() => { setActiveOverlay(null); setActiveInboxTab('forms'); }}>
+                  <button type="button" onClick={() => { setActiveOverlay(null); switchTab('notifications'); }}>
                     View all
                   </button>
                   <button type="button" className="dashboard-modal-close" onClick={() => setActiveOverlay(null)} aria-label="Close notifications">&times;</button>
                 </div>
               </div>
-              {notificationItems.length === 0 ? (
-                <p className="notification-empty">You have no new notifications.</p>
-              ) : (
-                notificationItems.map((item) => (
-                  <button key={item.id} type="button" className="notification-item" onClick={() => { setActiveOverlay(null); setActiveInboxTab(item.tone === 'new' ? 'forms' : 'requests'); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }}>
-                    <span className={`notification-dot ${item.tone}`} />
-                    <span><strong>{item.title}</strong><small>{item.message}</small></span>
-                  </button>
-                ))
-              )}
+              <NotificationList items={notificationItems} onOpen={openNotification} onDelete={dismissNotification} />
             </section>
           )}
           {activeOverlay === 'chat' && (
@@ -526,13 +561,33 @@ function Dashboard() {
               <button type="submit" className="profile-save-button">Save Profile</button>
             </form>
           )}
+          {activeOverlay === 'epass' && (
+            <section className="epass-panel dashboard-modal-panel" role="dialog" aria-modal="true" aria-labelledby="epass-modal-title">
+              <header className="epass-panel-header">
+                <div>
+                  <strong id="epass-modal-title">Tamil Nadu ePass</strong>
+                  <span>Apply for your official travel ePass</span>
+                </div>
+                <button type="button" onClick={() => setActiveOverlay(null)} aria-label="Close ePass">&times;</button>
+              </header>
+              <iframe
+                className="epass-frame"
+                src="https://tnepass.tn.gov.in/"
+                title="Tamil Nadu ePass application"
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+              <a className="epass-open-link" href="https://tnepass.tn.gov.in/" target="_blank" rel="noopener noreferrer">
+                If the form does not load, open the official TN ePass site
+              </a>
+            </section>
+          )}
         </div>,
         document.body
       )}
 
       <PullToRefresh onRefresh={handleRefresh}>
         <main className="dashboard-main" ref={mainRef}>
-          <ClimateCarousel activeTab={activeDashboardTab} />
+          <ClimateCarousel activeTab={activeDashboardTab} onOpenEpass={() => setActiveOverlay('epass')} />
 
           {/* ── Bottom Navigation Tabs ── */}
           <div className="dashboard-tabs" role="tablist" aria-label="Dashboard sections">
@@ -557,6 +612,19 @@ function Dashboard() {
             <div id="mail-panel" role="tabpanel" aria-labelledby="mail-tab">
               <CommunicationCenter />
             </div>
+          )}
+
+          {activeDashboardTab === 'notifications' && (
+            <section className="dashboard-notifications-page" id="notifications-panel" role="tabpanel" aria-labelledby="notifications-tab">
+              <div className="dashboard-notifications-heading">
+                <div>
+                  <span>Account updates</span>
+                  <h2>Notifications</h2>
+                </div>
+                {notificationItems.length > 0 && <span className="dashboard-notifications-count">{notificationItems.length} new</span>}
+              </div>
+              <NotificationList items={notificationItems} onOpen={openNotification} onDelete={dismissNotification} />
+            </section>
           )}
 
           {/* ── Mall Tab ── */}

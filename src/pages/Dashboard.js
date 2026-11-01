@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -158,10 +159,8 @@ function Dashboard() {
   const [activeDashboardTab, setActiveDashboardTab] = useState('explore');
   const [formAnswers, setFormAnswers] = useState({});
   const [booking, setBooking] = useState(emptyBooking);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [activeOverlay, setActiveOverlay] = useState(null);
   const [profileDraft, setProfileDraft] = useState({ name: '', phone: '', email: '' });
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState([
@@ -170,6 +169,22 @@ function Dashboard() {
   const [bizLoading, setBizLoading] = useState(false);
   const [bizError, setBizError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!activeOverlay) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setActiveOverlay(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeOverlay]);
 
   // Sync data when storage changes (admin updates trigger this)
   useEffect(() => {
@@ -266,7 +281,7 @@ function Dashboard() {
     event.preventDefault();
     if (!profileDraft.email.trim() || !profileDraft.email.includes('@')) return;
     updateProfile(profileDraft);
-    setProfileOpen(false);
+    setActiveOverlay(null);
   };
 
   const sendChatMessage = async (event) => {
@@ -429,15 +444,15 @@ function Dashboard() {
             </div>
           </div>
           <div className="header-right">
-            <button type="button" className="profile-button" onClick={() => setProfileOpen((open) => !open)} aria-label="Open profile" title="Edit profile">
+            <button type="button" className="profile-button" onClick={() => setActiveOverlay((overlay) => overlay === 'profile' ? null : 'profile')} aria-label="Open profile" title="Edit profile">
               <FaUser className="user-icon" />
               <span>{user?.name || 'Profile'}</span>
             </button>
-            <button type="button" className="notification-button" onClick={() => setNotificationsOpen((open) => !open)} aria-label="Open notifications" title="Notifications">
+            <button type="button" className="notification-button" onClick={() => setActiveOverlay((overlay) => overlay === 'notifications' ? null : 'notifications')} aria-label="Open notifications" title="Notifications">
               <FaBell />
               {notificationItems.length > 0 && <span className="notification-bell-count">{notificationItems.length}</span>}
             </button>
-            <button type="button" className="chat-button" onClick={() => setChatOpen((open) => !open)} aria-label="Open Nilgiris assistant" title="Nilgiris AI Assistant">
+            <button type="button" className="chat-button" onClick={() => setActiveOverlay((overlay) => overlay === 'chat' ? null : 'chat')} aria-label="Open Nilgiris assistant" title="Nilgiris AI Assistant">
               <FaRobot />
             </button>
             <button className="logout-button" onClick={logout}>
@@ -445,70 +460,81 @@ function Dashboard() {
             </button>
           </div>
         </div>
-        {notificationsOpen && (
-          <div className="notification-panel">
-            <div className="notification-panel-header">
-              <strong>Notifications</strong>
-              <button type="button" onClick={() => { setNotificationsOpen(false); setActiveInboxTab('forms'); }}>
-                View all
-              </button>
-            </div>
-            {notificationItems.length === 0 ? (
-              <p className="notification-empty">You have no new notifications.</p>
-            ) : (
-              notificationItems.map((item) => (
-                <button key={item.id} type="button" className="notification-item" onClick={() => { setNotificationsOpen(false); setActiveInboxTab(item.tone === 'new' ? 'forms' : 'requests'); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }}>
-                  <span className={`notification-dot ${item.tone}`} />
-                  <span><strong>{item.title}</strong><small>{item.message}</small></span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-        {chatOpen && (
-          <div className="chat-panel">
-            <div className="chat-panel-header">
-              <div><FaRobot /><strong>Nilgiris Assistant</strong></div>
-              <button type="button" onClick={() => setChatOpen(false)} aria-label="Close assistant">&times;</button>
-            </div>
-            <div className="chat-messages">
-              {chatMessages.map((message) => <div key={message.id} className={`chat-message ${message.sender}`}>
-                {message.text}
-                {message.sources?.length > 0 && <div className="chat-sources">
-                  <strong>Sources</strong>
-                  {message.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}
-                </div>}
-              </div>)}
-              {chatLoading && <div className="chat-message bot chat-loading" role="status">Searching public sources...</div>}
-            </div>
-            <form className="chat-form" onSubmit={sendChatMessage}>
-              <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask anything..." aria-label="Ask the assistant" disabled={chatLoading} />
-              <button type="submit" aria-label="Send message" disabled={chatLoading || !chatInput.trim()}><FaPaperPlane /></button>
-            </form>
-          </div>
-        )}
-        {profileOpen && (
-          <form className="profile-panel" onSubmit={handleProfileSave}>
-            <div className="profile-panel-header">
-              <div><strong>Edit profile</strong><span>Update your account details</span></div>
-              <button type="button" onClick={() => setProfileOpen(false)} aria-label="Close profile">&times;</button>
-            </div>
-            <label>
-              Name
-              <input value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} placeholder="Your name" />
-            </label>
-            <label>
-              Phone number
-              <input inputMode="numeric" value={profileDraft.phone} onChange={(event) => setProfileDraft({ ...profileDraft, phone: event.target.value.replace(/\D/g, '') })} placeholder="10-digit phone number" />
-            </label>
-            <label>
-              Email
-              <input type="email" value={profileDraft.email} onChange={(event) => setProfileDraft({ ...profileDraft, email: event.target.value })} placeholder="Your email" />
-            </label>
-            <button type="submit" className="profile-save-button">Save Profile</button>
-          </form>
-        )}
       </motion.header>
+
+      {activeOverlay && createPortal(
+        <div className="dashboard-modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setActiveOverlay(null);
+        }}>
+          {activeOverlay === 'notifications' && (
+            <section className="notification-panel dashboard-modal-panel" role="dialog" aria-modal="true" aria-labelledby="notifications-modal-title">
+              <div className="notification-panel-header">
+                <strong id="notifications-modal-title">Notifications</strong>
+                <div className="dashboard-modal-actions">
+                  <button type="button" onClick={() => { setActiveOverlay(null); setActiveInboxTab('forms'); }}>
+                    View all
+                  </button>
+                  <button type="button" className="dashboard-modal-close" onClick={() => setActiveOverlay(null)} aria-label="Close notifications">&times;</button>
+                </div>
+              </div>
+              {notificationItems.length === 0 ? (
+                <p className="notification-empty">You have no new notifications.</p>
+              ) : (
+                notificationItems.map((item) => (
+                  <button key={item.id} type="button" className="notification-item" onClick={() => { setActiveOverlay(null); setActiveInboxTab(item.tone === 'new' ? 'forms' : 'requests'); window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }}>
+                    <span className={`notification-dot ${item.tone}`} />
+                    <span><strong>{item.title}</strong><small>{item.message}</small></span>
+                  </button>
+                ))
+              )}
+            </section>
+          )}
+          {activeOverlay === 'chat' && (
+            <section className="chat-panel dashboard-modal-panel" role="dialog" aria-modal="true" aria-labelledby="chat-modal-title">
+              <div className="chat-panel-header">
+                <div><FaRobot /><strong id="chat-modal-title">Nilgiris Assistant</strong></div>
+                <button type="button" onClick={() => setActiveOverlay(null)} aria-label="Close assistant">&times;</button>
+              </div>
+              <div className="chat-messages">
+                {chatMessages.map((message) => <div key={message.id} className={`chat-message ${message.sender}`}>
+                  {message.text}
+                  {message.sources?.length > 0 && <div className="chat-sources">
+                    <strong>Sources</strong>
+                    {message.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}
+                  </div>}
+                </div>)}
+                {chatLoading && <div className="chat-message bot chat-loading" role="status">Searching public sources...</div>}
+              </div>
+              <form className="chat-form" onSubmit={sendChatMessage}>
+                <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ask anything..." aria-label="Ask the assistant" disabled={chatLoading} />
+                <button type="submit" aria-label="Send message" disabled={chatLoading || !chatInput.trim()}><FaPaperPlane /></button>
+              </form>
+            </section>
+          )}
+          {activeOverlay === 'profile' && (
+            <form className="profile-panel dashboard-modal-panel" onSubmit={handleProfileSave} role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+              <div className="profile-panel-header">
+                <div><strong id="profile-modal-title">Edit profile</strong><span>Update your account details</span></div>
+                <button type="button" onClick={() => setActiveOverlay(null)} aria-label="Close profile">&times;</button>
+              </div>
+              <label>
+                Name
+                <input value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} placeholder="Your name" />
+              </label>
+              <label>
+                Phone number
+                <input inputMode="numeric" value={profileDraft.phone} onChange={(event) => setProfileDraft({ ...profileDraft, phone: event.target.value.replace(/\D/g, '') })} placeholder="10-digit phone number" />
+              </label>
+              <label>
+                Email
+                <input type="email" value={profileDraft.email} onChange={(event) => setProfileDraft({ ...profileDraft, email: event.target.value })} placeholder="Your email" />
+              </label>
+              <button type="submit" className="profile-save-button">Save Profile</button>
+            </form>
+          )}
+        </div>,
+        document.body
+      )}
 
       <PullToRefresh onRefresh={handleRefresh}>
         <main className="dashboard-main" ref={mainRef}>

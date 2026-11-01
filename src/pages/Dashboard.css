@@ -968,9 +968,10 @@
   .welcome-text { margin-top: 3px; font-size: 11px; text-align: left; }
 
   .header-right {
+    display: grid;
     flex: 0 0 auto;
-    flex-direction: row;
-    justify-content: flex-end;
+    grid-template-columns: repeat(4, 40px);
+    justify-content: end;
     width: 100%;
     gap: clamp(8px, 2.5vw, 12px);
   }
@@ -979,10 +980,9 @@
   .notification-button,
   .chat-button,
   .logout-button {
-    display: inline-flex;
-    flex: 0 0 40px;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    flex: none;
+    place-items: center;
     width: 40px;
     height: 40px;
     min-width: 40px;
@@ -1023,7 +1023,7 @@
   .notification-button > .notification-bell-count { z-index: 1; }
 
   .profile-button span,
-  .logout-label { font-size: 0; }
+  .logout-label { display: none; }
 
   .logout-button svg { font-size: 16px; }
 

@@ -395,7 +395,7 @@ function Dashboard() {
         <div className="header-content">
           <div className="header-left">
             <div className="brand-lockup">
-              <img src="/nilgiris-logo.png" alt="The Nilgiris Tourism logo" className="brand-logo" />
+              <img src={`${process.env.PUBLIC_URL}/nilgiris-logo.png`} alt="The Nilgiris Tourism logo" className="brand-logo" />
               <div>
                 <h1 className="app-title">The Nilgiris Tourism and AR Based Heritage</h1>
                 <p className="welcome-text">Explore · Experience · Preserve</p>
@@ -619,7 +619,7 @@ function Dashboard() {
                     <div key={hotel.id} className="mini-card">
                       <img
                         className="mini-card-image"
-                        src={hotel.imageOverride || defaultHotelImages[hotel.name] || hotel.image || '/shopping/hill-crest-residency.webp'}
+                        src={hotel.imageOverride || defaultHotelImages[hotel.name] || hotel.image || `${process.env.PUBLIC_URL}/shopping/hill-crest-residency.webp`}
                         alt={hotel.name}
                         loading="lazy"
                       />

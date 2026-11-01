@@ -248,7 +248,7 @@ function SmartTourism() {
             </div>
 
             <div className="nilgiris-map-wrapper">
-              <img src="/nilgiris-taluks-map.jpg" alt="Map of the six Nilgiris taluks" className="nilgiris-map" />
+              <img src={`${process.env.PUBLIC_URL}/nilgiris-taluks-map.jpg`} alt="Map of the six Nilgiris taluks" className="nilgiris-map" />
               {talukaMapRegions.map((region) => (
                 <button
                   key={region.id}

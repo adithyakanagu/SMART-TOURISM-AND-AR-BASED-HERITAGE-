@@ -172,7 +172,7 @@ function Login() {
       <motion.div className="login-card" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}>
         <div className="login-header">
           <motion.div className="logo-icon image-logo-icon" animate={{ rotate: [0, 2, -2, 0] }} transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}>
-            <img src="/nilgiris-logo.png" alt="The Nilgiris Tourism logo" />
+            <img src={`${process.env.PUBLIC_URL}/nilgiris-logo.png`} alt="The Nilgiris Tourism logo" />
           </motion.div>
           <h1 className="login-title">The Nilgiris Tourism</h1>
           <p className="login-subtitle">AR Based Heritage</p>

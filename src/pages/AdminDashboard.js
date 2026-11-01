@@ -704,7 +704,7 @@ function AdminDashboard() {
                   <div className="admin-image-editor">
                     <img
                       className="admin-image-preview"
-                      src={hotel.imageOverride || defaultHotelImages[hotel.name] || hotel.image || '/shopping/hill-crest-residency.webp'}
+                      src={hotel.imageOverride || defaultHotelImages[hotel.name] || hotel.image || `${process.env.PUBLIC_URL}/shopping/hill-crest-residency.webp`}
                       alt={`${hotel.name} preview`}
                     />
                     <label>
@@ -853,7 +853,7 @@ function AdminDashboard() {
             <h2>Tourism Spots & Rush Updates</h2>
             <p className="admin-help-text">Select the taluk directly from the Nilgiris map before adding or updating tourism information.</p>
             <div className="admin-map-wrapper">
-              <img src="/nilgiris-taluks-map.jpg" alt="Map of the six Nilgiris taluks" className="admin-map-image" />
+              <img src={`${process.env.PUBLIC_URL}/nilgiris-taluks-map.jpg`} alt="Map of the six Nilgiris taluks" className="admin-map-image" />
               {adminTalukMapRegions.map((region) => (
                 <button
                   key={region.id}

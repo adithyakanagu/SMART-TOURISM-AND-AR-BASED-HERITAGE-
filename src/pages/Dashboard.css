@@ -976,27 +976,48 @@
   .notification-button,
   .chat-button,
   .logout-button {
+    display: inline-flex;
     flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
     width: 40px;
     height: 40px;
     min-width: 40px;
-    justify-content: center;
+    min-height: 40px;
+    overflow: visible;
     padding: 0;
     border-radius: 14px;
+    line-height: 1;
+  }
+
+  .profile-button > svg.user-icon,
+  .notification-button > svg,
+  .chat-button > svg,
+  .logout-button > svg {
+    display: block !important;
+    flex: 0 0 20px;
+    width: 20px !important;
+    min-width: 20px;
+    height: 20px !important;
+    min-height: 20px;
+    margin: 0;
+    overflow: visible;
+    color: #fff;
+    fill: currentColor;
+    opacity: 1;
+    visibility: visible;
   }
 
   .profile-button > svg,
   .notification-button > svg,
   .chat-button > svg,
   .logout-button > svg {
-    display: block;
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
+    flex-shrink: 0;
   }
 
-  .notification-button > svg,
-  .chat-button > svg { width: 20px; height: 20px; }
+  .notification-button > svg { width: 21px !important; height: 21px !important; }
+  .chat-button > svg { width: 22px !important; height: 22px !important; }
+  .notification-button > .notification-bell-count { z-index: 1; }
 
   .profile-button span,
   .logout-label { font-size: 0; }

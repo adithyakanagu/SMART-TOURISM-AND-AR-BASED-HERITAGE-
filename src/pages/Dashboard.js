@@ -216,7 +216,7 @@ function Dashboard() {
     } finally {
       setRefreshing(false);
     }
-  }, [activeDashboardTab, token, user, refreshing]);
+  }, [activeDashboardTab, token, refreshing]);
 
   const featuredProducts = useMemo(() => data.products, [data.products]);
   const featuredHotels = useMemo(() => data.hotels.filter((hotel) => hotel.available).slice(0, 6), [data.hotels]);

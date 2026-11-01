@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../data/api';
-import { addBusinessEntry, addProduct, addTaxi, addTourismPlace, addUserForm, confirmOrderPayment, loadAppData, replyToInquiry, saveAppData } from '../data/store';
+import { addBusinessEntry, addProduct, addTaxi, addTourismPlace, addUserForm, confirmOrderPayment, createHotelRecord, loadAppData, replyToInquiry, saveAppData } from '../data/store';
 import { defaultHotelImages, defaultProductImages } from '../data/shoppingImages';
+import CommunicationCenter from '../components/CommunicationCenter';
 import { FaArrowLeft, FaBox, FaHotel, FaCar, FaEnvelope, FaCheckCircle, FaMapMarkerAlt, FaBuilding, FaReceipt, FaClipboardList, FaChartBar, FaCloudSun, FaEdit, FaTrash } from 'react-icons/fa';
 import './AdminDashboard.css';
 
@@ -59,10 +60,12 @@ const tabs = [
   { key: 'forms', label: 'User Forms', icon: FaClipboardList },
   { key: 'climate', label: 'Climate Safety', icon: FaCloudSun },
   { key: 'analytics', label: 'Analytics', icon: FaChartBar },
-  { key: 'queries', label: 'Queries', icon: FaEnvelope }
+  { key: 'queries', label: 'Queries', icon: FaEnvelope },
+  { key: 'mail', label: 'Mail', icon: FaEnvelope }
 ];
 
 const emptyPlace = { name: '', district: 'Nilgiris', taluk: 'Ooty', type: 'Viewpoint', rush: 'Moderate', nearby: '', description: '' };
+const emptyHotel = { name: '', city: 'Ooty', district: 'Nilgiris', taluk: 'Ooty', roomsAvailable: '', pricePerNight: '', available: true, contact: '', address: '', description: '', imageOverride: '' };
 const emptyBusiness = { name: '', type: 'hotel', district: 'Nilgiris', taluk: 'Ooty', category: 'Stay', status: 'Open', contact: '' };
 const emptyProduct = { name: '', category: 'Food & Beverages', price: '', mrp: '', tribe: 'Nilgiris Artisan', image: '', description: '', inStock: true };
 const emptyTaxi = { name: '', pricePerTrip: '', available: true };
@@ -102,7 +105,15 @@ function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('products');
   const [data, setData] = useState(loadAppData());
   const [replyDrafts, setReplyDrafts] = useState({});
+  const [messageError, setMessageError] = useState('');
+  const [messageSuccess, setMessageSuccess] = useState('');
+  const [formSending, setFormSending] = useState(false);
+  const [replySendingId, setReplySendingId] = useState(null);
   const [newPlace, setNewPlace] = useState(emptyPlace);
+  const [newHotel, setNewHotel] = useState(emptyHotel);
+  const [hotelSaving, setHotelSaving] = useState(false);
+  const [hotelError, setHotelError] = useState('');
+  const [hotelSuccess, setHotelSuccess] = useState('');
   const [newBusiness, setNewBusiness] = useState(emptyBusiness);
   const [selectedAdminTaluk, setSelectedAdminTaluk] = useState('Ooty');
   const [newProduct, setNewProduct] = useState(emptyProduct);
@@ -170,6 +181,11 @@ function AdminDashboard() {
     orders: data.orders?.length || 0
   }), [data]);
 
+  const notificationCounts = useMemo(() => ({
+    queries: (data.inquiries || []).filter((inquiry) => inquiry.status === 'Pending').length,
+    forms: (data.forms || []).filter((form) => form.status !== 'Answered').length
+  }), [data.inquiries, data.forms]);
+
   const analytics = useMemo(() => ({
     revenue: (data.orders || []).filter((order) => order.status === 'Confirmed').reduce((total, order) => total + Number(order.total || 0), 0),
     pendingQueries: (data.inquiries || []).filter((inquiry) => inquiry.status === 'Pending').length,
@@ -229,6 +245,41 @@ function AdminDashboard() {
       setImageErrors((current) => ({ ...current, newProduct: error.message || 'Could not load this image.' }));
     }
     event.target.value = '';
+  };
+
+  const handleNewHotelImageUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImageErrors((current) => ({ ...current, newHotel: '' }));
+    try {
+      const imageOverride = await compressImage(file);
+      setNewHotel((current) => ({ ...current, imageOverride }));
+    } catch (error) {
+      setImageErrors((current) => ({ ...current, newHotel: error.message || 'Could not load this image.' }));
+    }
+    event.target.value = '';
+  };
+
+  const handleAddHotel = async (event) => {
+    event.preventDefault();
+    if (hotelSaving) return;
+    setHotelSaving(true);
+    setHotelError('');
+    setHotelSuccess('');
+    try {
+      const result = await createHotelRecord({
+        ...newHotel,
+        roomsAvailable: Number(newHotel.roomsAvailable),
+        pricePerNight: Number(newHotel.pricePerNight)
+      });
+      setData(result.data);
+      setNewHotel(emptyHotel);
+      setHotelSuccess('Hotel listing added.');
+    } catch (error) {
+      setHotelError(error.message || 'Could not add this hotel.');
+    } finally {
+      setHotelSaving(false);
+    }
   };
 
   const updateTaxi = (id, field, value) => {
@@ -309,13 +360,24 @@ function AdminDashboard() {
     setNewTaxi(emptyTaxi);
   };
 
-  const handleSendForm = (event) => {
+  const handleSendForm = async (event) => {
     event.preventDefault();
     const questions = newForm.questions.split('\n').map((text, index) => ({ id: index + 1, text: text.trim() })).filter((question) => question.text);
     if (!newForm.targetEmail.trim() || !newForm.title.trim() || !questions.length) return;
-    addUserForm({ ...newForm, questions, createdBy: user?.email });
-    setData(loadAppData());
-    setNewForm(emptyForm);
+    if (formSending) return;
+    setFormSending(true);
+    setMessageError('');
+    setMessageSuccess('');
+    try {
+      const result = await addUserForm({ ...newForm, questions });
+      setData(result.data);
+      setNewForm(emptyForm);
+      setMessageSuccess('Questionnaire sent. The user will see it in their app notifications.');
+    } catch (error) {
+      setMessageError(error.message || 'Could not send this questionnaire.');
+    } finally {
+      setFormSending(false);
+    }
   };
 
   const handleConfirmOrderPayment = async (orderId) => {
@@ -398,15 +460,22 @@ function AdminDashboard() {
     });
   };
 
-  const handleReply = (inquiryId) => {
+  const handleReply = async (inquiryId) => {
     const reply = (replyDrafts[inquiryId] || '').trim();
-    if (!reply) {
-      return;
+    if (!reply || replySendingId !== null) return;
+    setReplySendingId(inquiryId);
+    setMessageError('');
+    setMessageSuccess('');
+    try {
+      const result = await replyToInquiry(inquiryId, reply, 'Replied');
+      setReplyDrafts((previous) => ({ ...previous, [inquiryId]: '' }));
+      setData(result.data);
+      setMessageSuccess('Reply sent. The user will see it in their app notifications.');
+    } catch (error) {
+      setMessageError(error.message || 'Could not send this reply.');
+    } finally {
+      setReplySendingId(null);
     }
-
-    replyToInquiry(inquiryId, reply, 'Replied');
-    setReplyDrafts((previous) => ({ ...previous, [inquiryId]: '' }));
-    setData(loadAppData());
   };
 
   const handleLogout = () => {
@@ -473,6 +542,7 @@ function AdminDashboard() {
               onClick={() => setActiveTab(key)}
             >
               <Icon /> {label}
+              {notificationCounts[key] > 0 && <span className="admin-tab-count" aria-label={`${notificationCounts[key]} awaiting attention`}>{notificationCounts[key]}</span>}
             </button>
           ))}
         </nav>
@@ -565,6 +635,8 @@ function AdminDashboard() {
             </div>
           </section>
         )}
+
+        {activeTab === 'mail' && <CommunicationCenter isAdmin />}
 
         {activeTab === 'analytics' && (
           <section className="admin-panel">
@@ -669,7 +741,40 @@ function AdminDashboard() {
 
         {activeTab === 'hotels' && (
           <section className="admin-panel">
-            <h2>Hotel Availability & Rooms</h2>
+            <h2>Hotel Listings & Availability</h2>
+            {hotelError && <p className="climate-admin-feedback error" role="alert">{hotelError}</p>}
+            {hotelSuccess && <p className="climate-admin-feedback success" role="status">{hotelSuccess}</p>}
+            <form className="admin-form hotel-create-form" onSubmit={handleAddHotel}>
+              <input value={newHotel.name} onChange={(event) => setNewHotel({ ...newHotel, name: event.target.value })} placeholder="Hotel name" required />
+              <input value={newHotel.city} onChange={(event) => setNewHotel({ ...newHotel, city: event.target.value })} placeholder="City" required />
+              <input value={newHotel.taluk} onChange={(event) => setNewHotel({ ...newHotel, taluk: event.target.value })} placeholder="Taluk" />
+              <input value={newHotel.contact} onChange={(event) => setNewHotel({ ...newHotel, contact: event.target.value })} placeholder="Contact phone (optional)" inputMode="tel" />
+              <input value={newHotel.address} onChange={(event) => setNewHotel({ ...newHotel, address: event.target.value })} placeholder="Address (optional)" />
+              <div className="admin-field-row">
+                <label>
+                  Rooms available
+                  <input type="number" min="0" max="500" value={newHotel.roomsAvailable} onChange={(event) => setNewHotel({ ...newHotel, roomsAvailable: event.target.value })} required />
+                </label>
+                <label>
+                  Price/night (₹)
+                  <input type="number" min="0" max="500000" value={newHotel.pricePerNight} onChange={(event) => setNewHotel({ ...newHotel, pricePerNight: event.target.value })} required />
+                </label>
+              </div>
+              <textarea value={newHotel.description} onChange={(event) => setNewHotel({ ...newHotel, description: event.target.value })} placeholder="Hotel description (optional)" />
+              <label>
+                Hotel image URL (optional)
+                <input type="url" value={newHotel.imageOverride && !newHotel.imageOverride.startsWith('data:') ? newHotel.imageOverride : ''} onChange={(event) => setNewHotel({ ...newHotel, imageOverride: event.target.value })} placeholder="https://…" />
+              </label>
+              <label className="admin-image-upload">
+                Upload hotel photo
+                <input type="file" accept="image/*" onChange={handleNewHotelImageUpload} />
+              </label>
+              {newHotel.imageOverride && <img className="admin-image-preview" src={newHotel.imageOverride} alt="New hotel preview" />}
+              {imageErrors.newHotel && <p className="admin-image-error" role="alert">{imageErrors.newHotel}</p>}
+              <button type="submit" className="admin-submit-btn" disabled={hotelSaving}>{hotelSaving ? 'Adding hotel…' : 'Add Hotel'}</button>
+            </form>
+
+            <h3>Current hotels</h3>
             <div className="admin-list-grid">
               {data.hotels.map((hotel) => (
                 <div key={hotel.id} className="admin-card">
@@ -699,6 +804,18 @@ function AdminDashboard() {
                   <label>
                     City
                     <input type="text" value={hotel.city} onChange={(e) => updateHotel(hotel.id, 'city', e.target.value)} />
+                  </label>
+                  <label>
+                    Contact phone
+                    <input type="tel" value={hotel.contact || ''} onChange={(e) => updateHotel(hotel.id, 'contact', e.target.value)} />
+                  </label>
+                  <label>
+                    Address
+                    <input type="text" value={hotel.address || ''} onChange={(e) => updateHotel(hotel.id, 'address', e.target.value)} />
+                  </label>
+                  <label>
+                    Description
+                    <textarea rows="2" value={hotel.description || ''} onChange={(e) => updateHotel(hotel.id, 'description', e.target.value)} />
                   </label>
 
                   <div className="admin-image-editor">
@@ -798,6 +915,8 @@ function AdminDashboard() {
         {activeTab === 'queries' && (
           <section className="admin-panel">
             <h2>User Orders & Queries</h2>
+            {messageError && <p className="message-feedback error" role="alert">{messageError}</p>}
+            {messageSuccess && <p className="message-feedback success" role="status">{messageSuccess}</p>}
             <div className="inquiry-list">
               {data.inquiries.map((inquiry) => (
                 <div key={inquiry.id} className="inquiry-card">
@@ -840,7 +959,9 @@ function AdminDashboard() {
                     <button className="status-btn success" onClick={() => updateInquiryStatus(inquiry.id, 'Resolved')}>
                       <FaCheckCircle /> Resolved
                     </button>
-                    <button className="status-btn reply" onClick={() => handleReply(inquiry.id)}>Send Reply</button>
+                    <button className="status-btn reply" disabled={replySendingId !== null} onClick={() => handleReply(inquiry.id)}>
+                      {replySendingId === inquiry.id ? 'Sending…' : 'Send Reply'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -886,6 +1007,9 @@ function AdminDashboard() {
               </select>
               <textarea value={newPlace.nearby} onChange={(e) => setNewPlace({ ...newPlace, nearby: e.target.value })} placeholder="Nearby places, separated by commas" />
               <textarea value={newPlace.description} onChange={(e) => setNewPlace({ ...newPlace, description: e.target.value })} placeholder="Short description" />
+              <input value={newPlace.bestSeason || ''} onChange={(e) => setNewPlace({ ...newPlace, bestSeason: e.target.value })} placeholder="Best season (verified details only)" />
+              <input value={newPlace.bestTime || ''} onChange={(e) => setNewPlace({ ...newPlace, bestTime: e.target.value })} placeholder="Best time to visit (optional)" />
+              <input value={newPlace.ticketPrice || ''} onChange={(e) => setNewPlace({ ...newPlace, ticketPrice: e.target.value })} placeholder="Ticket price (optional; leave blank if unknown)" />
               <button type="submit" className="admin-submit-btn">Add Tourism Spot</button>
             </form>
 
@@ -928,6 +1052,18 @@ function AdminDashboard() {
                   <label>
                     Description
                     <textarea rows="3" value={spot.description} onChange={(e) => updateTourismSpot(spot.id, 'description', e.target.value)} />
+                  </label>
+                  <label>
+                    Best season
+                    <input type="text" value={spot.bestSeason || ''} onChange={(e) => updateTourismSpot(spot.id, 'bestSeason', e.target.value)} placeholder="Not listed" />
+                  </label>
+                  <label>
+                    Best time to visit
+                    <input type="text" value={spot.bestTime || ''} onChange={(e) => updateTourismSpot(spot.id, 'bestTime', e.target.value)} placeholder="Not listed" />
+                  </label>
+                  <label>
+                    Ticket price
+                    <input type="text" value={spot.ticketPrice || ''} onChange={(e) => updateTourismSpot(spot.id, 'ticketPrice', e.target.value)} placeholder="Leave blank if unknown" />
                   </label>
                 </div>
               ))}
@@ -1056,12 +1192,14 @@ function AdminDashboard() {
           <section className="admin-panel">
             <h2>Send Questionnaire to a User</h2>
             <p className="admin-help-text">Create your own questions, one question per line. The selected user will receive them in Notifications.</p>
+            {messageError && <p className="message-feedback error" role="alert">{messageError}</p>}
+            {messageSuccess && <p className="message-feedback success" role="status">{messageSuccess}</p>}
             <form className="admin-form form-create-form" onSubmit={handleSendForm}>
-              <input type="email" value={newForm.targetEmail} onChange={(e) => setNewForm({ ...newForm, targetEmail: e.target.value })} placeholder="Specific user email" />
-              <input value={newForm.title} onChange={(e) => setNewForm({ ...newForm, title: e.target.value })} placeholder="Form title" />
+              <input type="email" required value={newForm.targetEmail} onChange={(e) => setNewForm({ ...newForm, targetEmail: e.target.value })} placeholder="Specific user email" />
+              <input required maxLength="120" value={newForm.title} onChange={(e) => setNewForm({ ...newForm, title: e.target.value })} placeholder="Form title" />
               <textarea value={newForm.description} onChange={(e) => setNewForm({ ...newForm, description: e.target.value })} placeholder="Message for the user" />
-              <textarea rows="6" value={newForm.questions} onChange={(e) => setNewForm({ ...newForm, questions: e.target.value })} placeholder={'Question 1\nQuestion 2\nQuestion 3'} />
-              <button type="submit" className="admin-submit-btn">Send Form</button>
+              <textarea required rows="6" value={newForm.questions} onChange={(e) => setNewForm({ ...newForm, questions: e.target.value })} placeholder={'Question 1\nQuestion 2\nQuestion 3'} />
+              <button type="submit" className="admin-submit-btn" disabled={formSending}>{formSending ? 'Sending…' : 'Send Form'}</button>
             </form>
 
             <div className="inquiry-list">

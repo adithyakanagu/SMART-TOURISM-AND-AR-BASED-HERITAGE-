@@ -132,7 +132,7 @@ export function AuthProvider({ children }) {
       ? null
       : new EventSource(`${API_BASE_URL}/api/stream`);
     stream?.addEventListener('data-updated', refresh);
-    const intervalId = window.setInterval(refresh, 30000);
+    const intervalId = window.setInterval(refresh, 10000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh();
     };

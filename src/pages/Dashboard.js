@@ -12,6 +12,7 @@ import { defaultHotelImages, defaultProductImages } from '../data/shoppingImages
 import { API_BASE_URL } from '../data/api';
 import { motion } from 'framer-motion';
 import PullToRefresh from '../components/PullToRefresh';
+import CommunicationCenter from '../components/CommunicationCenter';
 import {
   FaMapMarkedAlt,
   FaLandmark,
@@ -84,7 +85,8 @@ const TABS = [
   { id: 'climate', label: 'Climate', icon: FaCloudSun },
   { id: 'mall', label: 'Shopping Mall', icon: FaShoppingCart },
   { id: 'bookings', label: 'Hotel & Taxi', icon: FaHotel },
-  { id: 'businesses', label: 'Businesses', icon: FaStore }
+  { id: 'businesses', label: 'Businesses', icon: FaStore },
+  { id: 'mail', label: 'Mail', icon: FaEnvelope }
 ];
 
 function BusinessCard({ business, onEnquire }) {
@@ -151,6 +153,7 @@ function Dashboard() {
   const [data, setData] = useState(loadAppData());
   const [queryForm, setQueryForm] = useState(emptyForm);
   const [feedback, setFeedback] = useState('');
+  const [messageSending, setMessageSending] = useState(false);
   const [activeInboxTab, setActiveInboxTab] = useState('requests');
   const [activeDashboardTab, setActiveDashboardTab] = useState('explore');
   const [formAnswers, setFormAnswers] = useState({});
@@ -304,7 +307,7 @@ function Dashboard() {
 
   const handleQuickRequest = (type, item) => {
     if (type === 'product') {
-      navigate('/tribal-products', { state: { productId: item.id } });
+      navigate('/tribal-products', { state: { productId: item.id, checkout: true } });
       return;
     }
     setBooking({
@@ -318,42 +321,56 @@ function Dashboard() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
-  const handleBookingSubmit = (event) => {
+  const handleBookingSubmit = async (event) => {
     event.preventDefault();
     if (!booking.date || !booking.time || !booking.fullName.trim() || !booking.phone.trim() || (booking.type === 'taxi' && (!booking.pickup.trim() || !booking.destination.trim()))) {
       setFeedback('Please complete the booking date, time, name, phone, and travel locations.');
       return;
     }
+    if (messageSending) return;
     const details = booking.type === 'hotel'
       ? `Hotel: ${booking.itemName}. Check-in: ${booking.date} at ${booking.time}. Guests: ${booking.guests}. Guest name: ${booking.fullName}. Phone: ${booking.phone}. Notes: ${booking.notes || 'None'}.`
       : `Taxi: ${booking.itemName}. Travel: ${booking.date} at ${booking.time}. Passengers: ${booking.guests}. Pickup: ${booking.pickup}. Destination: ${booking.destination}. Name: ${booking.fullName}. Phone: ${booking.phone}. Notes: ${booking.notes || 'None'}.`;
 
-    addInquiryEntry({
-      userEmail: user?.email || 'guest@example.com',
-      subject: `${booking.type === 'hotel' ? 'Hotel booking' : 'Taxi booking'}: ${booking.itemName}`,
-      type: booking.type,
-      message: details
-    });
-    setData(loadAppData());
-    setBooking(emptyBooking);
-    setFeedback('Your booking request was sent to the admin successfully.');
+    setMessageSending(true);
+    try {
+      await addInquiryEntry({
+        subject: `${booking.type === 'hotel' ? 'Hotel booking' : 'Taxi booking'}: ${booking.itemName}`,
+        type: booking.type,
+        message: details
+      });
+      setData(loadAppData());
+      setBooking(emptyBooking);
+      setFeedback('Your booking request was sent to the admin successfully.');
+    } catch (error) {
+      setFeedback(error.message || 'Could not send your booking request. Please try again.');
+    } finally {
+      setMessageSending(false);
+    }
   };
 
-  const handleQuerySubmit = (event) => {
+  const handleQuerySubmit = async (event) => {
     event.preventDefault();
     if (!queryForm.subject.trim() || !queryForm.message.trim()) {
       setFeedback('Please enter a subject and description before submitting.');
       return;
     }
-    addInquiryEntry({
-      userEmail: user?.email || 'guest@example.com',
-      subject: queryForm.subject.trim(),
-      type: queryForm.type,
-      message: queryForm.message.trim()
-    });
-    setData(loadAppData());
-    setQueryForm(emptyForm);
-    setFeedback('Your request has been sent to the admin successfully.');
+    if (messageSending) return;
+    setMessageSending(true);
+    try {
+      await addInquiryEntry({
+        subject: queryForm.subject.trim(),
+        type: queryForm.type,
+        message: queryForm.message.trim()
+      });
+      setData(loadAppData());
+      setQueryForm(emptyForm);
+      setFeedback('Your request has been sent to the admin successfully.');
+    } catch (error) {
+      setFeedback(error.message || 'Could not send your request. Please try again.');
+    } finally {
+      setMessageSending(false);
+    }
   };
 
   const handleFormAnswer = (formId, questionId, answer) => {
@@ -363,14 +380,23 @@ function Dashboard() {
     }));
   };
 
-  const submitFormResponse = (form) => {
+  const submitFormResponse = async (form) => {
+    if (messageSending) return;
     const answers = form.questions.map((question) => ({
+      questionId: question.id,
       question: question.text,
       answer: formAnswers[form.id]?.[question.id] || ''
     }));
-    answerUserForm(form.id, answers, user?.email);
-    setData(loadAppData());
-    setFeedback('Your questionnaire response was sent to the admin.');
+    setMessageSending(true);
+    try {
+      await answerUserForm(form.id, answers);
+      setData(loadAppData());
+      setFeedback('Your questionnaire response was sent to the admin.');
+    } catch (error) {
+      setFeedback(error.message || 'Could not send your questionnaire response.');
+    } finally {
+      setMessageSending(false);
+    }
   };
 
   const handleBizEnquire = (business) => {
@@ -530,6 +556,11 @@ function Dashboard() {
           </div>
 
           {activeDashboardTab === 'climate' && <Climate />}
+          {activeDashboardTab === 'mail' && (
+            <div id="mail-panel" role="tabpanel" aria-labelledby="mail-tab">
+              <CommunicationCenter />
+            </div>
+          )}
 
           {/* ── Mall Tab ── */}
           {activeDashboardTab === 'mall' && <div id="mall-panel" role="tabpanel" aria-labelledby="mall-tab">
@@ -749,7 +780,7 @@ function Dashboard() {
                   </div>
 
                   {feedback && <div className="query-feedback">{feedback}</div>}
-                  <button type="submit" className="submit-query-btn"><FaCheckCircle /> Send Booking Request</button>
+                  <button type="submit" className="submit-query-btn" disabled={messageSending}><FaCheckCircle /> {messageSending ? 'Sending…' : 'Send Booking Request'}</button>
                 </form>
               </section>
             )}
@@ -878,7 +909,7 @@ function Dashboard() {
                     <div className="questionnaire-list">
                       {form.questions.map((question) => <label key={question.id}>{question.text}<textarea rows="2" value={formAnswers[form.id]?.[question.id] || ''} onChange={(event) => handleFormAnswer(form.id, question.id, event.target.value)} placeholder="Write your answer" /></label>)}
                     </div>
-                    <button type="button" className="submit-query-btn" onClick={() => submitFormResponse(form)}><FaCheckCircle /> Send Answers</button>
+                    <button type="button" className="submit-query-btn" disabled={messageSending} onClick={() => submitFormResponse(form)}><FaCheckCircle /> {messageSending ? 'Sending…' : 'Send Answers'}</button>
                   </>}
                 </div>
               ))}
@@ -931,8 +962,8 @@ function Dashboard() {
 
               {feedback && <div className="query-feedback">{feedback}</div>}
 
-              <button type="submit" className="submit-query-btn">
-                <FaCheckCircle /> Send to Admin
+              <button type="submit" className="submit-query-btn" disabled={messageSending}>
+                <FaCheckCircle /> {messageSending ? 'Sending…' : 'Send to Admin'}
               </button>
             </form>
           </section>

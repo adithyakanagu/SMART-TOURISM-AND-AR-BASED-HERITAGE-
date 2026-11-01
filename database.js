@@ -11,6 +11,7 @@ const collections = [
   'tourismSpots',
   'businesses',
   'forms',
+  'messages',
   'climateAdvisories'
 ];
 

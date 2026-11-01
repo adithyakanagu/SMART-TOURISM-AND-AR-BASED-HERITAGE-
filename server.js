@@ -88,6 +88,7 @@ const defaultState = {
   tourismSpots: [],
   businesses: [],
   forms: [],
+  messages: [],
   climateAdvisories: []
 };
 
@@ -97,6 +98,19 @@ function ensureDatabase() {
 
 function saveDatabase(data) {
   return database.replace(data);
+}
+
+function filterUserData(data, userEmail) {
+  const email = String(userEmail || '').trim().toLowerCase();
+  return {
+    ...data,
+    inquiries: (data.inquiries || []).filter((item) => String(item.userEmail || '').toLowerCase() === email),
+    orders: (data.orders || []).filter((item) => String(item.userEmail || '').toLowerCase() === email),
+    forms: (data.forms || []).filter((item) => String(item.targetEmail || '').toLowerCase() === email),
+    messages: (data.messages || []).filter((item) =>
+      String(item.fromEmail || '').toLowerCase() === email || String(item.toEmail || '').toLowerCase() === email
+    )
+  };
 }
 
 function mergeBootstrapData(existing, incoming) {
@@ -226,7 +240,7 @@ const transporter = SMTP_CONFIGURED
 const EMAIL_CONFIGURED = RESEND_CONFIGURED || SMTP_CONFIGURED;
 let emailProviderStatus = RESEND_CONFIGURED ? 'configured' : SMTP_CONFIGURED ? 'checking' : 'not-configured';
 
-async function sendAppEmail({ from, to, subject, text, html }) {
+async function sendAppEmail({ from, to, subject, text, html, replyTo }) {
   if (RESEND_CONFIGURED) {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -239,6 +253,7 @@ async function sendAppEmail({ from, to, subject, text, html }) {
         to: [to],
         subject,
         text,
+        ...(replyTo ? { reply_to: replyTo } : {}),
         ...(html ? { html } : {})
       }),
       signal: AbortSignal.timeout(15000)
@@ -256,7 +271,7 @@ async function sendAppEmail({ from, to, subject, text, html }) {
     throw new Error('No email provider is configured.');
   }
   try {
-    await transporter.sendMail({ from, to, subject, text, html });
+    await transporter.sendMail({ from, to, subject, text, html, ...(replyTo ? { replyTo } : {}) });
     emailProviderStatus = 'ready';
   } catch (error) {
     emailProviderStatus = 'error';
@@ -289,6 +304,13 @@ const chatLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Chat is receiving too many requests. Please wait a minute and try again.' }
+});
+const communicationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many messages were sent. Please wait a few minutes and try again.' }
 });
 const climateLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -644,6 +666,22 @@ app.post('/api/chat', authenticateToken, chatLimiter, async (req, res) => {
       return res.json(await searchPublicSources(question));
     }
 
+    const appData = ensureDatabase();
+    const tourismContext = (appData.tourismSpots || []).slice(0, 40).map((spot) =>
+      `${spot.name} (${spot.taluk || spot.district || 'Nilgiris'}): ${spot.description || 'Details not listed.'}${spot.bestSeason ? ` Best season: ${spot.bestSeason}.` : ''}${spot.bestTime ? ` Best time: ${spot.bestTime}.` : ''}${spot.ticketPrice ? ` Ticket price: ${spot.ticketPrice}.` : ''}`
+    ).join('\n');
+    const hotelContext = (appData.hotels || []).filter((hotel) => hotel.available).slice(0, 15).map((hotel) =>
+      `${hotel.name} in ${hotel.city || hotel.taluk || 'Nilgiris'}: ₹${hotel.pricePerNight || 'price not listed'}/night, ${hotel.roomsAvailable ?? 'availability not listed'} rooms listed.`
+    ).join('\n');
+    const productContext = (appData.products || []).filter((product) => product.inStock !== false).slice(0, 15).map((product) =>
+      `${product.name}: ₹${product.price}; ${product.description || 'Details not listed.'}`
+    ).join('\n');
+    const catalogContext = [
+      tourismContext ? `Tourism places:\n${tourismContext}` : '',
+      hotelContext ? `Available hotel listings:\n${hotelContext}` : '',
+      productContext ? `In-stock products:\n${productContext}` : ''
+    ].filter(Boolean).join('\n\n').slice(0, 12000);
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`, {
       method: 'POST',
       headers: {
@@ -652,7 +690,7 @@ app.post('/api/chat', authenticateToken, chatLimiter, async (req, res) => {
       },
       body: JSON.stringify({
         systemInstruction: {
-          parts: [{ text: 'You are the Nilgiris Smart Tourism assistant, but you can answer questions on any topic. Be helpful, clear, and accurate. Use Google Search grounding for current, changing, or unfamiliar facts. Distinguish facts from uncertainty, and never invent sources, links, or current information. Keep answers concise unless asked for detail.' }]
+          parts: [{ text: `You are the Nilgiris Smart Tourism assistant. Help visitors plan trips, compare listed hotels and local products, understand how to use the app to request bookings, and answer other questions clearly. Use only the supplied catalog for app-specific availability and prices; state when a detail is not listed and never claim to make a booking or confirm payment. For current opening times, transport, weather, access rules, or other changing facts, use Google Search grounding, distinguish verified facts from uncertainty, and never invent sources, links, or current information. Keep answers practical and concise unless asked for detail.${catalogContext ? `\n\nCurrent app catalog (prices and availability are listings only; users must confirm them):\n${catalogContext}` : '\n\nNo live app catalog is currently available. Do not invent Nilgiris listings or prices; direct users to the app listings and ask them to confirm details with providers.'}` }]
         },
         contents: [...history, { role: 'user', parts: [{ text: question }] }],
         tools: [{ googleSearch: {} }],
@@ -958,14 +996,7 @@ app.get('/api/data', authenticateToken, (req, res) => {
   const data = ensureDatabase();
   res.set('X-App-Data-Initialized', database.isInitialized() ? 'true' : 'false');
   if (req.user.role === 'admin') return res.json(data);
-
-  const email = String(req.user.email || '').toLowerCase();
-  return res.json({
-    ...data,
-    inquiries: data.inquiries.filter((item) => String(item.userEmail || '').toLowerCase() === email),
-    orders: data.orders.filter((item) => String(item.userEmail || '').toLowerCase() === email),
-    forms: data.forms.filter((item) => String(item.targetEmail || '').toLowerCase() === email)
-  });
+  return res.json(filterUserData(data, req.user.email));
 });
 
 app.post('/api/data/bootstrap', authenticateToken, requireAdmin, (req, res) => {
@@ -998,7 +1029,7 @@ app.post('/api/data', authenticateToken, requireAdmin, (req, res) => {
 });
 
 app.post('/api/inquiries', authenticateToken, (req, res) => {
-  const { userEmail, subject, type = 'general', message } = req.body || {};
+  const { subject, type = 'general', message } = req.body || {};
   const data = ensureDatabase();
 
   const inquiry = {
@@ -1019,7 +1050,92 @@ app.post('/api/inquiries', authenticateToken, (req, res) => {
 
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
-  res.status(201).json({ message: 'Inquiry submitted successfully.', inquiry, data: nextData });
+  res.status(201).json({ message: 'Inquiry submitted successfully.', inquiry, data: filterUserData(nextData, req.user.email) });
+});
+
+function normalizeCommunicationEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254 ? email : '';
+}
+
+function createCommunicationRecord({ fromEmail, toEmail, channel, subject = '', body }) {
+  return {
+    id: crypto.randomUUID(),
+    fromEmail,
+    toEmail,
+    channel,
+    subject,
+    body,
+    createdAt: new Date().toISOString()
+  };
+}
+
+app.post('/api/messages', authenticateToken, communicationLimiter, (req, res) => {
+  const fromEmail = normalizeCommunicationEmail(req.user.email);
+  const requestedRecipient = normalizeCommunicationEmail(req.body?.toEmail);
+  const toEmail = req.user.role === 'admin' ? requestedRecipient : ADMIN_EMAIL.toLowerCase();
+  const body = String(req.body?.body || '').trim();
+  if (!fromEmail || !toEmail || fromEmail === toEmail) {
+    return res.status(400).json({ message: 'Choose a valid recipient for this conversation.' });
+  }
+  if (body.length < 1 || body.length > 4000) {
+    return res.status(400).json({ message: 'Enter a message of up to 4,000 characters.' });
+  }
+
+  const data = ensureDatabase();
+  const messageRecord = createCommunicationRecord({ fromEmail, toEmail, channel: 'conversation', body });
+  const nextData = { ...data, messages: [messageRecord, ...(data.messages || [])] };
+  saveDatabase(nextData);
+  broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  return res.status(201).json({
+    message: 'Conversation message sent.',
+    messageRecord,
+    data: req.user.role === 'admin' ? nextData : filterUserData(nextData, fromEmail)
+  });
+});
+
+app.post('/api/mail/send', authenticateToken, communicationLimiter, async (req, res) => {
+  const fromEmail = normalizeCommunicationEmail(req.user.email);
+  const requestedRecipient = normalizeCommunicationEmail(req.body?.toEmail);
+  const toEmail = req.user.role === 'admin' ? requestedRecipient : ADMIN_EMAIL.toLowerCase();
+  const subject = String(req.body?.subject || '').trim();
+  const body = String(req.body?.body || '').trim();
+  if (!fromEmail || !toEmail || fromEmail === toEmail) {
+    return res.status(400).json({ message: 'Choose a valid recipient email address.' });
+  }
+  if (subject.length < 1 || subject.length > 120 || body.length < 1 || body.length > 4000) {
+    return res.status(400).json({ message: 'Enter a subject (up to 120 characters) and message (up to 4,000 characters).' });
+  }
+  if (!EMAIL_CONFIGURED) {
+    return res.status(503).json({ message: 'Email is not configured on the server, so this email was not sent.' });
+  }
+
+  const fromAddress = SMTP_USER
+    ? `"Nilgiris Tourism" <${SMTP_USER}>`
+    : `"Nilgiris Tourism" <${RESEND_FROM_EMAIL}>`;
+  try {
+    await sendAppEmail({
+      from: fromAddress,
+      to: toEmail,
+      replyTo: fromEmail,
+      subject,
+      text: `${body}\n\nSent through Nilgiris Smart Tourism by ${fromEmail}.`
+    });
+  } catch (error) {
+    console.error('Communication email send failed:', error.name === 'TimeoutError' ? 'Request timed out' : error.message);
+    return res.status(502).json({ message: 'The email provider did not confirm delivery. Please try again later.' });
+  }
+
+  const data = ensureDatabase();
+  const messageRecord = createCommunicationRecord({ fromEmail, toEmail, channel: 'email', subject, body });
+  const nextData = { ...data, messages: [messageRecord, ...(data.messages || [])] };
+  saveDatabase(nextData);
+  broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  return res.status(201).json({
+    message: 'Email accepted by the configured provider.',
+    messageRecord,
+    data: req.user.role === 'admin' ? nextData : filterUserData(nextData, fromEmail)
+  });
 });
 
 function buildOrderItems(data, items) {
@@ -1284,7 +1400,6 @@ app.post('/api/forms/:id/respond', authenticateToken, (req, res) => {
   if (String(form.targetEmail || '').toLowerCase() !== String(req.user.email || '').toLowerCase()) {
     return res.status(403).json({ message: 'This form is not assigned to your account.' });
   }
-
   const responseText = (answers || []).map((answer) => `${answer.question}: ${answer.answer || '(No answer)'}`).join('\n');
   const nextData = {
     ...data,
@@ -1306,7 +1421,11 @@ app.post('/api/forms/:id/respond', authenticateToken, (req, res) => {
 
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
-  res.json({ message: 'Form response saved successfully.', form: nextData.forms.find((item) => item.id === id), data: nextData });
+  res.json({
+    message: 'Form response saved successfully.',
+    form: nextData.forms.find((item) => item.id === id),
+    data: filterUserData(nextData, req.user.email)
+  });
 });
 
 app.post('/api/admin/products', authenticateToken, requireAdmin, (req, res) => {
@@ -1343,7 +1462,10 @@ app.post('/api/admin/tourism', authenticateToken, requireAdmin, (req, res) => {
     type: place.type || 'Viewpoint',
     rush: place.rush || 'Moderate',
     nearby: Array.isArray(place.nearby) ? place.nearby : String(place.nearby || '').split(',').map((item) => item.trim()).filter(Boolean),
-    description: place.description || ''
+    description: place.description || '',
+    bestSeason: String(place.bestSeason || '').trim().slice(0, 160),
+    bestTime: String(place.bestTime || '').trim().slice(0, 160),
+    ticketPrice: String(place.ticketPrice || '').trim().slice(0, 160)
   };
 
   const nextData = { ...data, tourismSpots: [nextPlace, ...data.tourismSpots] };

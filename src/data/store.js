@@ -422,6 +422,7 @@ const getDefaultState = () => ({
   businesses: defaultBusinesses,
   orders: defaultOrders,
   forms: defaultForms,
+  messages: [],
   climateAdvisories: []
 });
 
@@ -433,27 +434,23 @@ export function notifyAppDataUpdated() {
   window.dispatchEvent(new Event('arSmartTourismDataUpdated'));
 }
 
-function requestAuthenticatedApi(route, body) {
+async function requestAuthenticatedApi(route, body) {
   const token = localStorage.getItem('arTourismToken');
-  if (!token) return Promise.resolve(null);
+  if (!token) throw new Error('Please sign in before sending a message.');
 
-  return fetch(`${API_BASE_URL}${route}`, {
+  const response = await fetch(`${API_BASE_URL}${route}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify(body)
-  }).then(async (response) => {
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({}));
-      throw new Error(result.message || 'The backend could not save this change.');
-    }
-    return response.json();
-  }).catch((error) => {
-    console.error('Backend save failed:', error.message);
-    return null;
   });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.message || 'The backend could not save this change.');
+  }
+  return result;
 }
 
 function scheduleAdminSync(data) {
@@ -511,6 +508,7 @@ export function loadAppData() {
       businesses: parsed.businesses || defaultBusinesses,
       orders: parsed.orders || defaultOrders,
       forms: parsed.forms || defaultForms,
+      messages: parsed.messages || [],
       climateAdvisories: parsed.climateAdvisories || []
     };
   } catch (error) {
@@ -526,27 +524,32 @@ export function saveAppData(data) {
   return data;
 }
 
-export function addInquiryEntry({ userEmail, subject, type = 'general', message }) {
-  const data = loadAppData();
-  const entry = {
-    id: Date.now(),
-    userEmail: userEmail || 'guest@example.com',
-    subject: subject || 'General Inquiry',
-    type,
-    message: message || '',
-    status: 'Pending',
-    reply: '',
-    replyAt: ''
-  };
+export async function addInquiryEntry({ subject, type = 'general', message }) {
+  const result = await requestAuthenticatedApi('/api/inquiries', { subject, type, message });
+  if (!result.inquiry || !result.data) {
+    throw new Error('The server did not confirm that your message was saved.');
+  }
+  localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+  notifyAppDataUpdated();
+  return result.inquiry;
+}
 
-  const nextData = {
-    ...data,
-    inquiries: [entry, ...data.inquiries]
-  };
+async function sendCommunication(route, body) {
+  const result = await requestAuthenticatedApi(route, body);
+  if (!result.messageRecord || !result.data) {
+    throw new Error('The server did not confirm delivery of this message.');
+  }
+  localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+  notifyAppDataUpdated();
+  return result;
+}
 
-  saveAppData(nextData);
-  requestAuthenticatedApi('/api/inquiries', { subject: entry.subject, type: entry.type, message: entry.message });
-  return entry;
+export function sendConversationMessage({ toEmail, body }) {
+  return sendCommunication('/api/messages', { toEmail, body });
+}
+
+export function sendEmailMessage({ toEmail, subject, body }) {
+  return sendCommunication('/api/mail/send', { toEmail, subject, body });
 }
 
 export function loadCart() {
@@ -769,51 +772,40 @@ export function addTaxi(taxi) {
   return nextTaxi;
 }
 
-export function addUserForm({ targetEmail, title, description, questions, createdBy }) {
+export async function addUserForm({ targetEmail, title, description, questions }) {
   const data = loadAppData();
+  const createdAt = new Date().toISOString();
   const form = {
     id: `form-${Date.now()}`,
     targetEmail: targetEmail.trim().toLowerCase(),
     title: title.trim(),
     description: description || '',
-    questions: questions.map((question) => ({ id: `question-${Date.now()}-${question.id}`, text: question.text, answer: '' })),
+    questions: questions.map((question) => ({
+      id: `question-${Date.now()}-${question.id}`,
+      text: question.text,
+      answer: ''
+    })),
     status: 'Unread',
     response: '',
-    createdBy: createdBy || ADMIN_EMAIL,
-    createdAt: new Date().toISOString(),
+    createdBy: ADMIN_EMAIL,
+    createdAt,
     answeredAt: ''
   };
-
-  saveAppData({ ...data, forms: [form, ...(data.forms || [])] });
-  return form;
+  const result = await requestAdminCollection('POST', '/api/data', {
+    ...data,
+    forms: [form, ...(data.forms || [])]
+  });
+  return { ...result, form };
 }
 
-export function answerUserForm(formId, answers, userEmail) {
-  const data = loadAppData();
-  const response = answers.map((answer) => `${answer.question}: ${answer.answer || '(No answer)'}`).join('\n');
-  const nextForms = (data.forms || []).map((form) =>
-    form.id === formId
-      ? { ...form, status: 'Answered', response, answeredAt: new Date().toISOString() }
-      : form
-  );
-  const form = nextForms.find((item) => item.id === formId);
-  const inquiry = form ? {
-    id: Date.now() + 1,
-    userEmail: userEmail || form.targetEmail,
-    subject: `Form response: ${form.title}`,
-    type: 'form',
-    message: response,
-    status: 'Pending',
-    reply: '',
-    replyAt: ''
-  } : null;
-
-  saveAppData({
-    ...data,
-    forms: nextForms,
-    inquiries: inquiry ? [inquiry, ...data.inquiries] : data.inquiries
-  });
-  return form;
+export async function answerUserForm(formId, answers) {
+  const result = await requestAuthenticatedApi(`/api/forms/${encodeURIComponent(formId)}/respond`, { answers });
+  if (!result.form || !result.data) {
+    throw new Error('The server did not confirm that your response was saved.');
+  }
+  localStorage.setItem('arSmartTourismData', JSON.stringify(result.data));
+  notifyAppDataUpdated();
+  return result.form;
 }
 
 export function addTourismPlace(place) {
@@ -832,7 +824,10 @@ export function addTourismPlace(place) {
         type: place.type,
         rush: place.rush,
         nearby,
-        description: place.description
+        description: place.description,
+        bestSeason: place.bestSeason || '',
+        bestTime: place.bestTime || '',
+        ticketPrice: place.ticketPrice || ''
       },
       ...data.tourismSpots
     ]
@@ -865,26 +860,11 @@ export function addBusinessEntry(business) {
   return nextData.businesses[0];
 }
 
-export function replyToInquiry(inquiryId, replyText, status = 'Replied') {
-  const data = loadAppData();
-  const trimmedReply = (replyText || '').trim();
-
-  const nextData = {
-    ...data,
-    inquiries: data.inquiries.map((inquiry) =>
-      inquiry.id === inquiryId
-        ? {
-            ...inquiry,
-            status,
-            reply: trimmedReply,
-            replyAt: trimmedReply ? new Date().toISOString() : inquiry.replyAt
-          }
-        : inquiry
-    )
-  };
-
-  saveAppData(nextData);
-  return nextData.inquiries.find((inquiry) => inquiry.id === inquiryId) || null;
+export async function replyToInquiry(inquiryId, replyText, status = 'Replied') {
+  return requestAdminCollection('POST', `/api/admin/inquiries/${encodeURIComponent(inquiryId)}/reply`, {
+    replyText,
+    status
+  });
 }
 
 export function getAdminEmail() {

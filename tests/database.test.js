@@ -26,6 +26,7 @@ test('persists one-time codes and resend limits across database restarts and dat
     tourismSpots: [],
     businesses: [],
     forms: [],
+    messages: [{ id: 'message-1', channel: 'conversation', fromEmail: 'visitor@example.com', toEmail: 'admin@example.com', body: 'Hello' }],
     climateAdvisories: []
   });
   firstDatabase.markInitialized();
@@ -35,6 +36,7 @@ test('persists one-time codes and resend limits across database restarts and dat
   try {
     assert.deepEqual(restartedDatabase.getOtpState('visitor@example.com'), otpState);
     assert.equal(restartedDatabase.read().products.length, 1);
+    assert.equal(restartedDatabase.read().messages[0].body, 'Hello');
   } finally {
     restartedDatabase.close();
   }

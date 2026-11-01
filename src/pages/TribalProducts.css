@@ -540,6 +540,24 @@
   background: #e5f2ff;
 }
 
+.upi-payment-qr {
+  display: block;
+  width: min(240px, 100%);
+  aspect-ratio: 1;
+  justify-self: center;
+  border: 1px solid #d5e1ea;
+  border-radius: 14px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.upi-recipient-warning {
+  padding: 10px 12px;
+  border-radius: 9px;
+  color: #704b16 !important;
+  background: #fff8e7;
+}
+
 .payment-actions {
   display: grid;
   grid-template-columns: 0.8fr 1.2fr;

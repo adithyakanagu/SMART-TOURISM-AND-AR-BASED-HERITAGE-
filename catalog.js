@@ -31,6 +31,10 @@ function optionalUrl(value) {
 function normalizeHotel(input = {}, existing = {}) {
   const name = sanitizeText(input.name ?? existing.name, 120);
   const city = sanitizeText(input.city ?? existing.city, 80) || 'Ooty';
+  const district = sanitizeText(input.district ?? existing.district, 80) || 'Nilgiris';
+  const taluk = sanitizeText(input.taluk ?? existing.taluk ?? city, 80) || city;
+  const contact = sanitizeText(input.contact ?? existing.contact, 40);
+  const address = sanitizeText(input.address ?? existing.address, 200);
   const description = sanitizeMultiline(input.description ?? existing.description, 800);
   const roomsAvailable = Number(input.roomsAvailable ?? existing.roomsAvailable ?? 0);
   const pricePerNight = Number(input.pricePerNight ?? existing.pricePerNight ?? 0);
@@ -53,11 +57,20 @@ function normalizeHotel(input = {}, existing = {}) {
     error.statusCode = 400;
     throw error;
   }
+  if (contact && !/^[0-9+\-()\s]{6,20}$/.test(contact)) {
+    const error = new Error('Enter a valid hotel contact number.');
+    error.statusCode = 400;
+    throw error;
+  }
 
   return {
     id: existing.id || `hotel-${crypto.randomUUID()}`,
     name,
     city,
+    district,
+    taluk,
+    contact,
+    address,
     description,
     roomsAvailable: Math.round(roomsAvailable),
     pricePerNight: Math.round(pricePerNight),

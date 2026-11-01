@@ -21,6 +21,7 @@ function TribalProducts() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const directCheckout = location.state?.checkout === true;
   const [products, setProducts] = useState(() => loadAppData().products);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,10 +55,11 @@ function TribalProducts() {
   useEffect(() => {
     const requestedProduct = products.find((product) => product.id === location.state?.productId);
     if (!requestedProduct) return;
+    if (directCheckout) setCheckoutStep('cart');
     setCart((current) => current.some((item) => item.product.id === requestedProduct.id)
       ? current
       : [...current, { product: requestedProduct, quantity: 1 }]);
-  }, [products, location.state?.productId]);
+  }, [products, location.state?.productId, directCheckout]);
 
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
@@ -180,11 +182,11 @@ function TribalProducts() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <h2>🌿 Authentic Tribal Products</h2>
-          <p>Support indigenous artisans • Handcrafted with love • Direct from Nilgiris</p>
+          <h2>{directCheckout ? 'Complete your order' : '🌿 Authentic Tribal Products'}</h2>
+          <p>{directCheckout ? 'Confirm your product and enter the delivery details to continue.' : 'Support indigenous artisans • Handcrafted with love • Direct from Nilgiris'}</p>
         </motion.div>
 
-        <div className="products-controls">
+        {!directCheckout && <div className="products-controls">
           <div className="search-box">
             <FaSearch />
             <input
@@ -205,9 +207,9 @@ function TribalProducts() {
               ))}
             </select>
           </div>
-        </div>
+        </div>}
 
-        <div className="products-grid">
+        {!directCheckout && <div className="products-grid">
           {filteredProducts.map((product, index) => (
             <motion.div
               key={product.id}
@@ -254,11 +256,18 @@ function TribalProducts() {
               </div>
             </motion.div>
           ))}
-        </div>
+        </div>}
 
-        {filteredProducts.length === 0 && (
+        {!directCheckout && filteredProducts.length === 0 && (
           <div className="no-products">
             <p>No products found. Try a different search or category.</p>
+          </div>
+        )}
+
+        {directCheckout && !cart.length && (
+          <div className="no-products" role="status">
+            <p>This product is no longer available. Browse the store to choose another item.</p>
+            <button type="button" className="add-cart-btn" onClick={() => navigate('/tribal-products', { replace: true, state: null })}>Browse products</button>
           </div>
         )}
 
@@ -344,7 +353,9 @@ function TribalProducts() {
               <div className="upi-brand">UPI</div>
               <h4>Pay securely with UPI</h4>
               <p>Pay using any UPI app. An administrator will verify your payment before the bill is issued.</p>
+              <img className="upi-payment-qr" src={`${process.env.PUBLIC_URL}/payment-upi-qr.png`} alt="Scan the supplied UPI payment QR code" />
               <p className="upi-id">UPI ID: <strong>7708466812@upi</strong></p>
+              <p className="upi-recipient-warning">Before confirming payment, check that your UPI app shows <strong>7708466812@upi</strong> as the recipient. Cancel if the displayed recipient is different.</p>
               <button className="pay-button" onClick={openUpiPayment}><FaCreditCard /> Pay with UPI</button>
               <label>
                 UPI Transaction Reference

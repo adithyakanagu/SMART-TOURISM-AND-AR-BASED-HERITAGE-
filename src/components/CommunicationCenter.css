@@ -1,0 +1,207 @@
+.communication-panel {
+  display: grid;
+  gap: 18px;
+  margin: 0 auto;
+  padding: clamp(16px, 3vw, 26px);
+  border: 1px solid rgba(30, 71, 48, 0.1);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 30, 20, 0.08);
+}
+
+.communication-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.communication-heading h2 {
+  margin: 0 0 6px;
+  color: #1f473d;
+}
+
+.communication-heading p,
+.communication-empty {
+  margin: 0;
+  color: #65796f;
+  line-height: 1.5;
+}
+
+.communication-recipient,
+.communication-compose label {
+  display: grid;
+  gap: 7px;
+  color: #456358;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.communication-recipient {
+  min-width: min(320px, 100%);
+}
+
+.communication-recipient input,
+.communication-compose input,
+.communication-compose textarea {
+  width: 100%;
+  border: 1px solid #d5e4da;
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: #213c31;
+  background: #fbfefc;
+  font: inherit;
+}
+
+.communication-mode-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #e4eee6;
+}
+
+.communication-mode-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -1px;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: #60766a;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.communication-mode-tabs button.active {
+  border-bottom-color: #2e7d50;
+  color: #1f6b43;
+}
+
+.communication-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 180px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f5f8f5;
+}
+
+.communication-thread .communication-empty {
+  margin: auto;
+  text-align: center;
+}
+
+.communication-message {
+  max-width: min(88%, 680px);
+  align-self: flex-start;
+  padding: 12px 14px;
+  border: 1px solid #e3ebe3;
+  border-radius: 14px 14px 14px 4px;
+  background: #fff;
+}
+
+.communication-message.own {
+  align-self: flex-end;
+  border-color: #d3ead8;
+  border-radius: 14px 14px 4px 14px;
+  background: #edf8ef;
+}
+
+.communication-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 5px 12px;
+  color: #587067;
+  font-size: 0.76rem;
+}
+
+.communication-message-meta time {
+  color: #829087;
+}
+
+.communication-message-subject {
+  display: block;
+  margin-top: 9px;
+  color: #2f5746;
+}
+
+.communication-message p {
+  margin: 7px 0 0;
+  color: #2c4438;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.communication-compose {
+  display: grid;
+  gap: 12px;
+}
+
+.communication-compose textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.communication-compose button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 11px;
+  color: #fff;
+  background: linear-gradient(135deg, #1e7a4d, #5ebd74);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.communication-compose button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.communication-feedback {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-weight: 700;
+}
+
+.communication-feedback.error {
+  color: #a52e2e;
+  background: #fff0ef;
+}
+
+.communication-feedback.success {
+  color: #24633b;
+  background: #e9f8ee;
+}
+
+@media (max-width: 640px) {
+  .communication-heading {
+    flex-direction: column;
+  }
+
+  .communication-recipient {
+    width: 100%;
+  }
+
+  .communication-message {
+    max-width: 96%;
+  }
+
+  .communication-message-meta {
+    flex-direction: column;
+  }
+}

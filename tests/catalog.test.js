@@ -5,11 +5,22 @@ const { verifyRazorpayCheckoutSignature } = require('../payments');
 const crypto = require('crypto');
 
 test('normalizes and validates a hotel', () => {
-  const hotel = normalizeHotel({ name: 'Hill Crest', city: 'Ooty', roomsAvailable: '8', pricePerNight: '2500', description: 'Garden stay' });
+  const hotel = normalizeHotel({
+    name: 'Hill Crest',
+    city: 'Ooty',
+    taluk: 'Ooty',
+    contact: '9876543210',
+    roomsAvailable: '8',
+    pricePerNight: '2500',
+    description: 'Garden stay'
+  });
   assert.equal(hotel.name, 'Hill Crest');
+  assert.equal(hotel.taluk, 'Ooty');
+  assert.equal(hotel.contact, '9876543210');
   assert.equal(hotel.roomsAvailable, 8);
   assert.equal(hotel.pricePerNight, 2500);
   assert.throws(() => normalizeHotel({ name: '' }), /hotel name/i);
+  assert.throws(() => normalizeHotel({ name: 'Hill Crest', contact: 'invalid' }), /contact/i);
 });
 
 test('normalizes and validates a business', () => {

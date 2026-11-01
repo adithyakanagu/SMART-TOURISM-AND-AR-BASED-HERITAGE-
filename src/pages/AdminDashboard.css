@@ -783,6 +783,7 @@
   .admin-header {
     flex-direction: column;
     align-items: flex-start;
+    padding-top: max(24px, calc(env(safe-area-inset-top, 0px) + 10px));
   }
 
   .admin-header-right {
@@ -806,7 +807,7 @@
   }
 
   .admin-header {
-    padding: 18px 16px;
+    padding: max(24px, calc(env(safe-area-inset-top, 0px) + 10px)) 16px 18px;
   }
 
   .climate-admin-form .climate-admin-wide {

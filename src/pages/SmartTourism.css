@@ -1115,7 +1115,7 @@
   .tourism-header {
     min-height: 58px;
     gap: 10px;
-    padding: max(24px, calc(env(safe-area-inset-top, 0px) + 10px)) 14px 9px;
+    padding: max(32px, calc(env(safe-area-inset-top, 0px) + 14px)) 14px 9px;
     background: #174b37;
     box-shadow: 0 5px 18px rgba(18, 51, 37, 0.15);
   }

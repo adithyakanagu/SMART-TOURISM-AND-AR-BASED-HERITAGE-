@@ -926,6 +926,9 @@
   .dashboard-header {
     position: sticky;
     top: 0;
+    transform: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     /* top padding = status bar height + design padding */
     padding-top: max(24px, calc(env(safe-area-inset-top, 0px) + 10px));
     padding-right: 16px;

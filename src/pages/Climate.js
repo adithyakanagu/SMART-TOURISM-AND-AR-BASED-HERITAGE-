@@ -5,10 +5,12 @@ import {
   FaCloud,
   FaCloudRain,
   FaCloudSun,
+  FaArrowRight,
   FaExclamationTriangle,
   FaExternalLinkAlt,
   FaEye,
   FaMapMarkerAlt,
+  FaMountain,
   FaRedoAlt,
   FaSmog,
   FaSnowflake,
@@ -132,6 +134,100 @@ function SafetyStatus({ safety }) {
   );
 }
 
+function getOverviewEffect(report) {
+  if ((report?.advisories || []).some((advisory) => advisory.type === 'landslide')) return 'landslide';
+  const code = Number(report?.weather?.current?.weatherCode);
+  if ([95, 96, 99].includes(code)) return 'storm';
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'rain';
+  if ([45, 48].includes(code)) return 'fog';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'snow';
+  if ([0, 1].includes(code)) return 'sunny';
+  return 'cloudy';
+}
+
+export function ClimateOverview({ locationId = 'ooty', onLocationChange, onViewDetails }) {
+  const [refreshToken, setRefreshToken] = useState(0);
+  const { report, loading, error } = useClimateReport(locationId, refreshToken);
+  const locationName = report?.location?.name || CLIMATE_LOCATIONS.find((location) => location.id === locationId)?.name || 'Nilgiris';
+  const current = report?.weather?.current;
+  const WeatherIcon = current ? getWeatherIcon(current.weatherCode) : FaCloud;
+  const effect = getOverviewEffect(report);
+  const status = report?.safety?.status || 'unable-to-verify';
+  const primaryAdvisory = (report?.advisories || []).find((advisory) => advisory.type === 'landslide' || advisory.status === 'not-recommended') || report?.advisories?.[0];
+
+  return (
+    <section className={`climate-overview status-${status}`} aria-label="Climate and travel safety overview">
+      <header className="climate-overview-header">
+        <div>
+          <span className="climate-overview-eyebrow"><FaCloudSun aria-hidden="true" /> Nilgiris climate & safety</span>
+          <h2>Before you travel</h2>
+        </div>
+        <div className="climate-overview-tools">
+          <label className="climate-overview-location">
+            <FaMapMarkerAlt aria-hidden="true" />
+            <select aria-label="Choose climate overview location" value={locationId} onChange={(event) => onLocationChange?.(event.target.value)}>
+              {CLIMATE_LOCATIONS.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </select>
+          </label>
+          <button type="button" className="climate-refresh" onClick={() => setRefreshToken((value) => value + 1)} disabled={loading}>
+            <FaRedoAlt aria-hidden="true" /> Refresh
+          </button>
+        </div>
+      </header>
+
+      <div className="climate-overview-main">
+        <div className={`climate-overview-scene effect-${effect}`} aria-hidden="true">
+          {effect === 'landslide' ? (
+            <>
+              <FaMountain className="climate-overview-weather-icon" />
+              <span className="climate-overview-slope" />
+              <span className="climate-overview-slope-piece" />
+            </>
+          ) : (
+            <>
+              <WeatherIcon className="climate-overview-weather-icon" />
+              {effect === 'rain' || effect === 'storm' ? <span className="climate-overview-rain">{[0, 1, 2, 3, 4].map((drop) => <i key={drop} />)}</span> : null}
+              {effect === 'snow' && <span className="climate-overview-snow">{[0, 1, 2, 3].map((flake) => <i key={flake}>*</i>)}</span>}
+              {effect === 'fog' && <span className="climate-overview-fog"><i /><i /><i /></span>}
+            </>
+          )}
+        </div>
+
+        <div className="climate-overview-summary">
+          <span className="climate-overview-place">{locationName}</span>
+          {loading ? (
+            <p className="climate-inline-state" role="status">Checking current weather and published safety advisories…</p>
+          ) : error ? (
+            <p className="climate-inline-error" role="alert">{error}</p>
+          ) : (
+            <>
+              <div className="climate-overview-weather">
+                <strong>{current ? `${current.temperatureC.toFixed(1)}°C` : '—'}</strong>
+                <span>{current?.condition || report?.weatherError || 'Live weather unavailable'}</span>
+              </div>
+              <SafetyStatus safety={report?.safety} />
+              {primaryAdvisory && (
+                <div className={`climate-overview-advisory ${primaryAdvisory.status}`}>
+                  <strong>{primaryAdvisory.title}</strong>
+                  <span>{primaryAdvisory.message}</span>
+                </div>
+              )}
+              {!primaryAdvisory && (
+                <p className="climate-overview-disclaimer">No current administrator-published advisory is recorded. This is not a guarantee that no official warning exists.</p>
+              )}
+            </>
+          )}
+          {error && <SafetyStatus safety={{ status: 'unable-to-verify', reason: 'Safety could not be verified because the climate report is unavailable.' }} />}
+          <button type="button" className="climate-overview-details" onClick={onViewDetails}>
+            View full climate report <FaArrowRight aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      {current?.time && <p className="climate-overview-updated">Weather model updated {formatTime(current.time)} · not an on-site measurement</p>}
+    </section>
+  );
+}
+
 function AdvisoryList({ report }) {
   const advisories = report?.advisories || [];
   return (
@@ -227,8 +323,8 @@ export function ClimateSafetyCard({ location, destinationName }) {
   );
 }
 
-function Climate() {
-  const [selectedTown, setSelectedTown] = useState('ooty');
+function Climate({ embedded = false, initialLocation = 'ooty', onLocationChange }) {
+  const [selectedTown, setSelectedTown] = useState(() => getLocationId(initialLocation) || 'ooty');
   const [selectedSpotId, setSelectedSpotId] = useState('');
   const [seasonIndex, setSeasonIndex] = useState(0);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -285,11 +381,17 @@ function Climate() {
 
   const selectDestination = (value) => {
     if (value.startsWith('spot:')) {
-      setSelectedSpotId(value.slice(5));
+      const spotId = value.slice(5);
+      setSelectedSpotId(spotId);
+      const spot = tourismSpots.find((item) => String(item.id) === spotId);
+      const nextLocation = getLocationId(spot?.taluk);
+      if (nextLocation) onLocationChange?.(nextLocation);
       return;
     }
+    const nextLocation = getLocationId(value.slice(5)) || 'ooty';
     setSelectedSpotId('');
-    setSelectedTown(value.slice(5));
+    setSelectedTown(nextLocation);
+    onLocationChange?.(nextLocation);
   };
 
   const destinationOptions = useMemo(() => tourismSpots
@@ -301,7 +403,13 @@ function Climate() {
   const statusClass = report?.safety?.status || 'unable-to-verify';
 
   return (
-    <section className="climate-page" id="climate-panel" role="tabpanel" aria-labelledby="climate-tab">
+    <section
+      className="climate-page"
+      id="climate-panel"
+      role={embedded ? 'region' : 'tabpanel'}
+      aria-label={embedded ? 'Detailed climate and trip planning' : undefined}
+      aria-labelledby={embedded ? undefined : 'climate-tab'}
+    >
       <header className="climate-page-header">
         <div>
           <span className="climate-eyebrow">Nilgiris climate & trip planning</span>

@@ -38,7 +38,7 @@ import {
   FaCloudSun
 } from 'react-icons/fa';
 import './Dashboard.css';
-import Climate from './Climate';
+import ClimateCarousel from './ClimateCarousel';
 
 const modules = [
   {
@@ -71,12 +71,6 @@ const modules = [
     path: '/badaga-link',
     image: 'https://images.unsplash.com/photo-1543269865-cbf427effbad?w=600'
   }
-];
-
-const quickStats = [
-  { label: 'Heritage communities', value: '6', tone: 'green' },
-  { label: 'Smart routes', value: '24/7', tone: 'gold' },
-  { label: 'Live guides', value: 'AI + AR', tone: 'purple' }
 ];
 
 const emptyForm = { type: 'general', subject: '', message: '' };
@@ -538,29 +532,7 @@ function Dashboard() {
 
       <PullToRefresh onRefresh={handleRefresh}>
         <main className="dashboard-main" ref={mainRef}>
-          <motion.section
-            className="hero-panel"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="hero-copy">
-              <span className="live-chip">Live Nilgiris experience</span>
-              <h2>Explore the hills with cultural depth and smart travel guidance.</h2>
-              <p>
-                Discover heritage, local craft, tourism routes, and community stories designed for a richer visit to the Nilgiris.
-              </p>
-            </div>
-
-            <div className="stats-bar">
-              {quickStats.map((stat) => (
-                <div key={stat.label} className={`stat-pill ${stat.tone}`}>
-                  <strong>{stat.value}</strong>
-                  <span>{stat.label}</span>
-                </div>
-              ))}
-            </div>
-          </motion.section>
+          <ClimateCarousel activeTab={activeDashboardTab} />
 
           {/* ── Bottom Navigation Tabs ── */}
           <div className="dashboard-tabs" role="tablist" aria-label="Dashboard sections">
@@ -581,7 +553,6 @@ function Dashboard() {
             ))}
           </div>
 
-          {activeDashboardTab === 'climate' && <Climate />}
           {activeDashboardTab === 'mail' && (
             <div id="mail-panel" role="tabpanel" aria-labelledby="mail-tab">
               <CommunicationCenter />

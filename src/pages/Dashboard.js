@@ -178,6 +178,7 @@ function Dashboard() {
   const [activeDashboardTab, setActiveDashboardTab] = useState('explore');
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState([]);
   const [formAnswers, setFormAnswers] = useState({});
+  const [selectedCommunication, setSelectedCommunication] = useState(null);
   const [booking, setBooking] = useState(emptyBooking);
   const [activeOverlay, setActiveOverlay] = useState(null);
   const [epassError, setEpassError] = useState('');
@@ -304,9 +305,23 @@ function Dashboard() {
   const notificationItems = useMemo(() => [
     ...myForms.filter((form) => form.status === 'Unread').map((form) => ({ id: form.id, title: form.title, message: 'New questionnaire from admin', tone: 'new' })),
     ...myRequests.filter((request) => request.reply).slice(0, 5).map((request) => ({ id: `reply-${request.id}`, title: request.subject, message: 'Admin replied to your request', tone: 'reply' })),
-    ...myRequests.filter((request) => request.status === 'Pending').slice(0, 5).map((request) => ({ id: `pending-${request.id}`, title: request.subject, message: 'Request is being reviewed', tone: 'pending' }))
+    ...myRequests.filter((request) => request.status === 'Pending').slice(0, 5).map((request) => ({ id: `pending-${request.id}`, title: request.subject, message: 'Request is being reviewed', tone: 'pending' })),
+    ...(data.messages || [])
+      .filter((message) => (
+        String(message.toEmail || '').trim().toLowerCase() === String(user?.email || '').trim().toLowerCase() &&
+        String(message.fromEmail || '').trim().toLowerCase() !== String(user?.email || '').trim().toLowerCase()
+      ))
+      .map((message) => ({
+        id: `message-${message.id}`,
+        title: message.channel === 'email' ? (message.subject || 'New email from Nilgiris Tourism') : 'New message from Nilgiris Tourism',
+        message: message.body,
+        tone: message.channel === 'email' ? 'email' : 'message',
+        communication: message,
+        createdAt: message.createdAt
+      }))
   ].filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index)
-    .filter((item) => !dismissedNotificationIds.includes(String(item.id))), [myForms, myRequests, dismissedNotificationIds]);
+    .filter((item) => !dismissedNotificationIds.includes(String(item.id)))
+    .sort((first, second) => (Date.parse(second.createdAt || '') || 0) - (Date.parse(first.createdAt || '') || 0)), [data.messages, myForms, myRequests, user?.email, dismissedNotificationIds]);
   const myOrders = useMemo(
     () => (data.orders || []).filter((order) => order.userEmail?.toLowerCase() === user?.email?.toLowerCase()),
     [data.orders, user?.email]
@@ -329,7 +344,13 @@ function Dashboard() {
 
   const openNotification = (item) => {
     setActiveOverlay(null);
+    if (item.communication) {
+      setSelectedCommunication(item.communication);
+      switchTab('mail');
+      return;
+    }
     setActiveInboxTab(item.tone === 'new' ? 'forms' : 'requests');
+    switchTab('notifications');
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
@@ -504,7 +525,7 @@ function Dashboard() {
               <FaUser className="user-icon" />
               <span>{user?.name || 'Profile'}</span>
             </button>
-            <button type="button" className="notification-button" onClick={() => setActiveOverlay((overlay) => overlay === 'notifications' ? null : 'notifications')} aria-label="Open notifications" title="Notifications">
+            <button type="button" className="notification-button" onClick={() => setActiveOverlay((overlay) => overlay === 'notifications' ? null : 'notifications')} aria-label={notificationItems.length ? `Open notifications, ${notificationItems.length} unread` : 'Open notifications'} title="Notifications">
               <FaBell />
               {notificationItems.length > 0 && <span className="notification-bell-count">{notificationItems.length}</span>}
             </button>
@@ -631,7 +652,7 @@ function Dashboard() {
 
           {activeDashboardTab === 'mail' && (
             <div id="mail-panel" role="tabpanel" aria-labelledby="mail-tab">
-              <CommunicationCenter />
+              <CommunicationCenter key={selectedCommunication?.id || 'mail'} selectedMessage={selectedCommunication} />
             </div>
           )}
 

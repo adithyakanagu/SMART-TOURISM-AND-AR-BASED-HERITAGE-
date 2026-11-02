@@ -28,6 +28,33 @@
   line-height: 1.5;
 }
 
+.communication-heading {
+  padding-bottom: 4px;
+}
+
+.communication-mode-tabs {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid #e0ebe3;
+  border-radius: 12px;
+  background: #f5f9f6;
+}
+
+.communication-mode-tabs button {
+  margin: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.communication-mode-tabs button.active {
+  color: #15583d;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(25, 68, 45, 0.1);
+}
+
 .communication-recipient,
 .communication-compose label {
   display: grid;
@@ -39,6 +66,12 @@
 
 .communication-recipient {
   min-width: min(320px, 100%);
+}
+
+.communication-recipient small {
+  color: #71847a;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .communication-recipient input,
@@ -142,6 +175,7 @@
 .communication-compose {
   display: grid;
   gap: 12px;
+  max-width: 860px;
 }
 
 .communication-compose textarea {
@@ -195,6 +229,18 @@
 
   .communication-recipient {
     width: 100%;
+  }
+
+  .communication-mode-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .communication-mode-tabs button {
+    justify-content: center;
+    padding-inline: 8px;
+    font-size: 0.85rem;
   }
 
   .communication-message {

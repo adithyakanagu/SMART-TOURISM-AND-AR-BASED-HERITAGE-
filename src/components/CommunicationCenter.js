@@ -4,11 +4,11 @@ import { ADMIN_EMAIL, loadAppData, sendConversationMessage, sendEmailMessage } f
 import { useAuth } from '../context/AuthContext';
 import './CommunicationCenter.css';
 
-function CommunicationCenter({ isAdmin = false }) {
+function CommunicationCenter({ isAdmin = false, selectedMessage = null }) {
   const { user } = useAuth();
   const [data, setData] = useState(loadAppData);
   const [activeMode, setActiveMode] = useState('conversation');
-  const [recipient, setRecipient] = useState(isAdmin ? '' : ADMIN_EMAIL);
+  const [recipient, setRecipient] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -38,9 +38,14 @@ function CommunicationCenter({ isAdmin = false }) {
   }, [data]);
 
   useEffect(() => {
-    if (isAdmin && !recipient && contactEmails.length) setRecipient(contactEmails[0]);
-    if (!isAdmin) setRecipient(ADMIN_EMAIL);
-  }, [isAdmin, recipient, contactEmails]);
+    if (!isAdmin && recipient !== ADMIN_EMAIL) setRecipient(ADMIN_EMAIL);
+  }, [isAdmin, recipient]);
+
+  useEffect(() => {
+    if (!selectedMessage) return;
+    setRecipient(selectedMessage.fromEmail || '');
+    setActiveMode(selectedMessage.channel === 'email' ? 'email' : 'conversation');
+  }, [selectedMessage]);
 
   const visibleMessages = useMemo(() => {
     const peerEmail = isAdmin ? recipient.trim().toLowerCase() : ADMIN_EMAIL.toLowerCase();
@@ -82,25 +87,9 @@ function CommunicationCenter({ isAdmin = false }) {
     <section className="communication-panel" aria-label="Mail and conversations">
       <header className="communication-heading">
         <div>
-          <h2>{isAdmin ? 'User communication' : 'Contact the admin'}</h2>
-          <p>Use in-app messages for live replies, or send an actual email.</p>
+          <h2>{isAdmin ? 'Mail & user messages' : 'Contact Nilgiris Tourism'}</h2>
+          <p>{isAdmin ? 'Choose a communication type, enter the user’s email, and view the conversation history.' : 'Send an in-app message or an email to the Nilgiris Tourism admin.'}</p>
         </div>
-        {isAdmin && (
-          <label className="communication-recipient">
-            User email
-            <input
-              type="email"
-              list="communication-contact-list"
-              value={recipient}
-              onChange={(event) => setRecipient(event.target.value)}
-              placeholder="Enter the user's email"
-              required
-            />
-            <datalist id="communication-contact-list">
-              {contactEmails.map((email) => <option key={email} value={email} />)}
-            </datalist>
-          </label>
-        )}
       </header>
 
       <div className="communication-mode-tabs" role="tablist" aria-label="Communication type">
@@ -111,7 +100,7 @@ function CommunicationCenter({ isAdmin = false }) {
           className={activeMode === 'conversation' ? 'active' : ''}
           onClick={() => { setActiveMode('conversation'); setError(''); setSuccess(''); }}
         >
-          <FaComments /> Conversation
+          <FaComments /> In-app message
         </button>
         <button
           type="button"
@@ -145,9 +134,31 @@ function CommunicationCenter({ isAdmin = false }) {
       </div>
 
       <form className="communication-compose" onSubmit={handleSend}>
+        <label className="communication-recipient">
+          {isAdmin ? 'To — user email' : 'To'}
+          <input
+            type="email"
+            list={isAdmin ? 'communication-contact-list' : undefined}
+            value={isAdmin ? recipient : ADMIN_EMAIL}
+            onChange={(event) => setRecipient(event.target.value)}
+            placeholder={isAdmin ? 'Enter the recipient’s email address' : undefined}
+            readOnly={!isAdmin}
+            aria-label={isAdmin ? 'Recipient email address' : 'Admin email address'}
+            required
+            autoComplete="email"
+          />
+          {isAdmin && (
+            <>
+              <small>Enter an email address or choose an existing contact.</small>
+              <datalist id="communication-contact-list">
+                {contactEmails.map((email) => <option key={email} value={email} />)}
+              </datalist>
+            </>
+          )}
+        </label>
         {activeMode === 'email' && (
           <label>
-            Subject
+            Email subject
             <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength="120" required />
           </label>
         )}
@@ -158,7 +169,7 @@ function CommunicationCenter({ isAdmin = false }) {
             onChange={(event) => setBody(event.target.value)}
             maxLength="4000"
             rows="4"
-            placeholder={activeMode === 'email' ? 'Write your email…' : 'Write a message…'}
+            placeholder={activeMode === 'email' ? 'Write your email…' : 'Write your in-app message…'}
             required
           />
         </label>

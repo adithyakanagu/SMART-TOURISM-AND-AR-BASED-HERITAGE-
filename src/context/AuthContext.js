@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { ADMIN_EMAIL, loadAppData, notifyAppDataUpdated, refreshAppDataFromServer } from '../data/store';
 import { API_BASE_URL } from '../data/api';
 
@@ -45,6 +47,72 @@ export function AuthProvider({ children }) {
       setUser(JSON.parse(storedUser));
     }
   }, [token]);
+
+  useEffect(() => {
+    if (loading || !Capacitor.isNativePlatform() || !token || !user?.email || user.role !== 'user') return undefined;
+    let active = true;
+    const listeners = [];
+
+    const registerForPush = async () => {
+      listeners.push(await PushNotifications.addListener('registration', async ({ value }) => {
+        if (!active) return;
+        localStorage.setItem('arTourismPushToken', value);
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/push/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ token: value })
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.message || 'The server could not register this device for notifications.');
+          }
+        } catch (error) {
+          console.error('Mobile push token registration failed:', error.message);
+        }
+      }));
+      listeners.push(await PushNotifications.addListener('registrationError', (error) => {
+        console.error('Mobile push registration failed:', error.error);
+      }));
+
+      if (!active) return;
+      if (Capacitor.getPlatform() === 'android') {
+        await PushNotifications.createChannel({
+          id: 'tourism_alerts',
+          name: 'Nilgiris Tourism Alerts',
+          description: 'Administrator messages, request updates, and travel-safety alerts',
+          importance: 5,
+          visibility: 1,
+          sound: 'app_noti',
+          lights: true,
+          lightColor: '#2E7D32',
+          vibration: true
+        });
+      }
+
+      let permission = await PushNotifications.checkPermissions();
+      if (permission.receive === 'prompt') permission = await PushNotifications.requestPermissions();
+      if (permission.receive !== 'granted') {
+        console.warn('Mobile notifications are disabled. Enable notification permission in Android settings to receive alerts.');
+        return;
+      }
+      await PushNotifications.register();
+    };
+
+    registerForPush().catch((error) => {
+      console.error('Mobile notification setup failed:', error.message);
+    });
+
+    return () => {
+      active = false;
+      listeners.forEach((listener) => listener.remove().catch((error) => {
+        console.error('Could not remove a mobile push listener:', error.message);
+      }));
+    };
+  }, [loading, token, user?.email, user?.role]);
 
   useEffect(() => {
     if (!token || !user?.email) return undefined;
@@ -166,6 +234,22 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    const pushToken = localStorage.getItem('arTourismPushToken');
+    if (Capacitor.isNativePlatform() && pushToken && token) {
+      void fetch(`${API_BASE_URL}/api/push/unregister`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ token: pushToken })
+      }).then((response) => {
+        if (!response.ok) throw new Error(`The server could not unregister this device (HTTP ${response.status}).`);
+      }).catch((error) => {
+        console.error('Mobile push token removal failed:', error.message);
+      });
+    }
+    localStorage.removeItem('arTourismPushToken');
     localStorage.removeItem('arTourismUser');
     localStorage.removeItem('arTourismToken');
     setUser(null);

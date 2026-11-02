@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import {
   addInquiryEntry,
   answerUserForm,
@@ -178,6 +180,7 @@ function Dashboard() {
   const [formAnswers, setFormAnswers] = useState({});
   const [booking, setBooking] = useState(emptyBooking);
   const [activeOverlay, setActiveOverlay] = useState(null);
+  const [epassError, setEpassError] = useState('');
   const [profileDraft, setProfileDraft] = useState({ name: '', phone: '', email: '' });
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -187,6 +190,21 @@ function Dashboard() {
   const [bizLoading, setBizLoading] = useState(false);
   const [bizError, setBizError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  const openEpass = async () => {
+    setEpassError('');
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url: 'https://tnepass.tn.gov.in/' });
+      } else {
+        window.open('https://tnepass.tn.gov.in/', '_blank', 'noopener,noreferrer');
+      }
+      setActiveOverlay(null);
+    } catch (error) {
+      console.error('Could not open the official TN ePass site.', error);
+      setEpassError('The TN ePass site could not be opened. Please try again or use the official-site link below.');
+    }
+  };
 
   useEffect(() => {
     if (!activeOverlay) return undefined;
@@ -570,14 +588,17 @@ function Dashboard() {
                 </div>
                 <button type="button" onClick={() => setActiveOverlay(null)} aria-label="Close ePass">&times;</button>
               </header>
-              <iframe
-                className="epass-frame"
-                src="https://tnepass.tn.gov.in/"
-                title="Tamil Nadu ePass application"
-                referrerPolicy="strict-origin-when-cross-origin"
-              />
+              <div className="epass-content">
+                <div className="epass-content-icon"><FaCar aria-hidden="true" /></div>
+                <h2>Apply on the official TN ePass portal</h2>
+                <p>The portal opens in a secure in-app browser. Complete your application there, then return here when you are done.</p>
+                <button type="button" className="epass-apply-button" onClick={openEpass}>
+                  <FaLink aria-hidden="true" /> Continue to TN ePass
+                </button>
+                {epassError && <p className="epass-error" role="alert">{epassError}</p>}
+              </div>
               <a className="epass-open-link" href="https://tnepass.tn.gov.in/" target="_blank" rel="noopener noreferrer">
-                If the form does not load, open the official TN ePass site
+                Open the official TN ePass site in your browser
               </a>
             </section>
           )}

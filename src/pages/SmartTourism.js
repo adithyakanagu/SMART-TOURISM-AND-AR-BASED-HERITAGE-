@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import {
   FaArrowLeft,
   FaCompass,
   FaCar,
   FaGlobe,
   FaStreetView,
-  FaTimes,
   FaSearchLocation,
   FaHeart,
   FaPlus,
@@ -19,8 +20,7 @@ import { loadAppData } from '../data/store';
 import './SmartTourism.css';
 
 const defaultTourismData = loadAppData();
-const googleMapsEmbedApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-const streetViewCoordinateCache = new Map();
+const googleEarthSearchUrl = 'https://earth.google.com/web/search/';
 
 const talukaMapRegions = [
   { id: 'pandalur', name: 'Pandalur', className: 'region-pandalur' },
@@ -38,10 +38,7 @@ function SmartTourism() {
   const [selectedTaluk, setSelectedTaluk] = useState('Ooty');
   const [showTalukPlaces, setShowTalukPlaces] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState(null);
-  const [earthPlace, setEarthPlace] = useState(null);
-  const [earthViewMode, setEarthViewMode] = useState('satellite');
-  const [streetViewCoordinates, setStreetViewCoordinates] = useState(null);
-  const [streetViewMessage, setStreetViewMessage] = useState('');
+  const [externalViewError, setExternalViewError] = useState('');
   const [fromLocation, setFromLocation] = useState('');
   const [showNavigation, setShowNavigation] = useState(false);
   const [favorites, setFavorites] = useState([]);
@@ -49,17 +46,6 @@ function SmartTourism() {
   const [plannerDays, setPlannerDays] = useState('1');
   const [plannerInterest, setPlannerInterest] = useState('balanced');
   const [aiPlan, setAiPlan] = useState([]);
-
-  useEffect(() => {
-    if (!earthPlace) return undefined;
-
-    const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setEarthPlace(null);
-    };
-
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [earthPlace]);
 
   useEffect(() => {
     const syncTourismSpots = () => setTourismSpots(loadAppData().tourismSpots || []);
@@ -167,47 +153,19 @@ function SmartTourism() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const openGoogleEarth = (place) => {
-    setEarthPlace(place);
-    setEarthViewMode('satellite');
-    setStreetViewCoordinates(null);
-    setStreetViewMessage('');
-  };
-
-  const openStreetView = async (place) => {
-    setEarthPlace(place);
-    setEarthViewMode('streetview');
-    setStreetViewCoordinates(null);
-    setStreetViewMessage('');
-
-    if (!googleMapsEmbedApiKey) {
-      setStreetViewMessage('Add a Google Maps Embed API key as REACT_APP_GOOGLE_MAPS_API_KEY in .env, then restart the app.');
-      return;
-    }
-
+  const openGoogleEarth = async (place, viewMode) => {
     const locationQuery = `${place.name}, ${place.taluk}, The Nilgiris, Tamil Nadu, India`;
-    const cacheKey = locationQuery.toLowerCase();
-
+    const url = `${googleEarthSearchUrl}${encodeURIComponent(locationQuery)}`;
+    setExternalViewError('');
     try {
-      let coordinates = streetViewCoordinateCache.get(cacheKey);
-      if (!coordinates) {
-        const geocodeUrl = new URL('https://nominatim.openstreetmap.org/search');
-        geocodeUrl.search = new URLSearchParams({
-          format: 'jsonv2',
-          limit: '1',
-          countrycodes: 'in',
-          q: locationQuery
-        });
-        const response = await fetch(geocodeUrl);
-        if (!response.ok) throw new Error('Location lookup failed');
-        const [match] = await response.json();
-        if (!match) throw new Error('Location not found');
-        coordinates = `${match.lat},${match.lon}`;
-        streetViewCoordinateCache.set(cacheKey, coordinates);
+      if (Capacitor.isNativePlatform()) {
+        await Browser.open({ url });
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
       }
-      setStreetViewCoordinates(coordinates);
-    } catch {
-      setStreetViewMessage(`Could not find coordinates for ${place.name}.`);
+    } catch (error) {
+      console.error(`Could not open Google Earth ${viewMode} view for ${place.name}.`, error);
+      setExternalViewError(`Could not open Google Earth for ${place.name}. Please try again.`);
     }
   };
 
@@ -225,7 +183,7 @@ function SmartTourism() {
         {!showNavigation && !showTalukPlaces && (
           <motion.section className="map-section" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <h2 className="section-title">🗺️ Explore Nilgiris District</h2>
-            <p className="section-subtitle">Select a district and taluk to discover tourist places, rush levels, and nearby chill spots.</p>
+            <p className="section-subtitle">Choose a taluk from the map to explore its attractions, rush levels, and nearby chill spots.</p>
 
             <div className="filters-row">
               <label>
@@ -247,13 +205,15 @@ function SmartTourism() {
               </label>
             </div>
 
+            <p className="map-selection-guide"><FaSearchLocation aria-hidden="true" /> Select the taluk you want to explore from the map.</p>
+
             <div className="nilgiris-map-wrapper">
               <img src={`${process.env.PUBLIC_URL}/nilgiris-taluks-map.jpg`} alt="Map of the six Nilgiris taluks" className="nilgiris-map" />
               {talukaMapRegions.map((region) => (
                 <button
                   key={region.id}
                   type="button"
-                  className={`map-click-region ${region.className}`}
+                  className={`map-click-region ${region.className}${selectedTaluk === region.name ? ' selected' : ''}`}
                   onClick={() => selectTaluk(region.name)}
                   title={`Explore ${region.name} taluk`}
                   aria-label={`Explore ${region.name} taluk`}
@@ -265,7 +225,7 @@ function SmartTourism() {
 
             <div className="map-legend">
               {talukaMapRegions.map((region) => (
-                <button key={region.id} type="button" className="legend-item" onClick={() => selectTaluk(region.name)}>
+                <button key={region.id} type="button" className={`legend-item${selectedTaluk === region.name ? ' selected' : ''}`} onClick={() => selectTaluk(region.name)}>
                   <span className="legend-dot" />
                   {region.name}
                 </button>
@@ -347,11 +307,11 @@ function SmartTourism() {
                     <button type="button" className="spot-action secondary" onClick={() => addToTripPlan(place)}>
                       <FaPlus /> Add to trip
                     </button>
-                    <button type="button" className="spot-action secondary" onClick={() => openGoogleEarth(place)}>
-                      <FaGlobe /> Google Earth
+                    <button type="button" className="spot-action secondary" onClick={() => openGoogleEarth(place, '3D')}>
+                      <FaGlobe /> Google Earth 3D
                     </button>
-                    <button type="button" className="spot-action secondary" onClick={() => openStreetView(place)}>
-                      <FaStreetView /> Street View
+                    <button type="button" className="spot-action secondary" title="Open Google Earth and choose the Pegman icon for available Street View imagery." aria-label={`Open ${place.name} in Google Earth Street View; choose the Pegman icon for available imagery`} onClick={() => openGoogleEarth(place, 'Street View')}>
+                      <FaStreetView /> Google Earth Street View
                     </button>
                     <button type="button" className="spot-action" onClick={() => handleNavigation(place)}>View details</button>
                   </div>
@@ -373,6 +333,8 @@ function SmartTourism() {
                 ))}
               </div>}
             </div>
+
+            {externalViewError && <p className="external-view-error" role="alert">{externalViewError}</p>}
 
             {filteredSpots.length === 0 && (
               <div className="select-note">No tourism spots have been added for {selectedTaluk} yet.</div>
@@ -465,54 +427,6 @@ function SmartTourism() {
         )}
       </main>
 
-      {earthPlace && (
-        <div className="earth-view-backdrop">
-          <section className="earth-view-dialog" role="dialog" aria-modal="true" aria-labelledby="earth-view-title">
-            <header className="earth-view-header">
-              <div className="earth-view-heading">
-                {earthViewMode === 'streetview' ? <FaStreetView aria-hidden="true" /> : <FaGlobe aria-hidden="true" />}
-                <div>
-                  <h2 id="earth-view-title">{earthPlace.name}</h2>
-                  <p>{earthPlace.taluk}, The Nilgiris, Tamil Nadu</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="earth-view-close"
-                onClick={() => setEarthPlace(null)}
-                aria-label="Close Google Earth view"
-                title="Close"
-              >
-                <FaTimes />
-              </button>
-            </header>
-            {earthViewMode === 'streetview' ? (
-              streetViewMessage ? (
-                <div className="earth-view-message" role="status">
-                  <FaStreetView aria-hidden="true" />
-                  <p>{streetViewMessage}</p>
-                </div>
-              ) : streetViewCoordinates ? (
-                <iframe
-                  title={`Google Street View panorama of ${earthPlace.name}`}
-                  src={`https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(googleMapsEmbedApiKey)}&location=${encodeURIComponent(streetViewCoordinates)}&radius=1000&heading=0&pitch=0&fov=90`}
-                  allowFullScreen
-                  referrerPolicy="strict-origin-when-cross-origin"
-                />
-              ) : (
-                <div className="earth-view-message" role="status">Locating {earthPlace.name}...</div>
-              )
-            ) : (
-              <iframe
-                title={`Google Earth satellite map of ${earthPlace.name}`}
-                src={`https://maps.google.com/maps?q=${encodeURIComponent(`${earthPlace.name}, ${earthPlace.taluk}, The Nilgiris, Tamil Nadu, India`)}&t=k&z=15&output=embed`}
-                allowFullScreen
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            )}
-          </section>
-        </div>
-      )}
     </div>
   );
 }

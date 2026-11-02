@@ -33,34 +33,51 @@
 }
 
 .climate-carousel-epass {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-height: 38px;
   margin-left: auto;
   padding: 0 13px;
-  border: 1px solid #cfe0d1;
+  border: 0;
   border-radius: 999px;
-  color: #176d47;
-  background: #f4fbf4;
+  color: #fff;
+  background: linear-gradient(110deg, #f44949, #ff9f35, #ffe34a, #45cf79, #27a8e8, #8955e8, #f44949);
+  background-size: 300% 100%;
+  box-shadow: 0 0 12px rgba(255, 91, 82, 0.58), 0 0 24px rgba(81, 165, 239, 0.4);
+  animation: epass-rainbow-glow 4s ease-in-out infinite;
   cursor: pointer;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.38);
 }
 
 .climate-carousel-epass small {
   padding: 3px 7px;
   border-radius: 999px;
   color: #fff;
-  background: #176d47;
+  background: rgba(15, 52, 40, 0.42);
   font-size: 0.65rem;
   line-height: 1.2;
 }
 
 .climate-carousel-epass:hover {
-  border-color: #1d6848;
-  background: #eaf7ed;
+  box-shadow: 0 0 17px rgba(255, 91, 82, 0.72), 0 0 32px rgba(81, 165, 239, 0.56);
+  transform: translateY(-1px);
+}
+
+@keyframes epass-rainbow-glow {
+  0%, 100% {
+    background-position: 0% 50%;
+    box-shadow: 0 0 12px rgba(255, 91, 82, 0.58), 0 0 24px rgba(81, 165, 239, 0.4);
+  }
+  50% {
+    background-position: 100% 50%;
+    box-shadow: 0 0 15px rgba(80, 222, 130, 0.68), 0 0 28px rgba(169, 91, 239, 0.52);
+  }
 }
 
 .climate-carousel-arrow {
@@ -156,6 +173,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .climate-carousel-epass {
+    animation: none;
+    background-position: 50% 50%;
+  }
+
   .climate-carousel-arrow,
   .climate-carousel-dots button {
     transition: none;

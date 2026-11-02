@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../data/api';
 import { addBusinessEntry, addProduct, addTaxi, addTourismPlace, addUserForm, confirmOrderPayment, createHotelRecord, loadAppData, replyToInquiry, saveAppData } from '../data/store';
 import { defaultHotelImages, defaultProductImages } from '../data/shoppingImages';
 import CommunicationCenter from '../components/CommunicationCenter';
-import { FaArrowLeft, FaBox, FaHotel, FaCar, FaEnvelope, FaCheckCircle, FaMapMarkerAlt, FaBuilding, FaReceipt, FaClipboardList, FaChartBar, FaCloudSun, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaArrowLeft, FaBox, FaHotel, FaCar, FaEnvelope, FaCheckCircle, FaMapMarkerAlt, FaBuilding, FaReceipt, FaClipboardList, FaChartBar, FaCloudSun, FaEdit, FaTrash, FaTachometerAlt, FaLeaf, FaUserCircle, FaSignOutAlt, FaChevronRight, FaShieldAlt } from 'react-icons/fa';
 import './AdminDashboard.css';
 
 const climateLocations = [
@@ -102,7 +102,7 @@ const adminTalukMapRegions = [
 function AdminDashboard() {
   const navigate = useNavigate();
   const { user, token, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('products');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState(loadAppData());
   const [replyDrafts, setReplyDrafts] = useState({});
   const [messageError, setMessageError] = useState('');
@@ -180,6 +180,16 @@ function AdminDashboard() {
     businesses: data.businesses?.length || 0,
     orders: data.orders?.length || 0
   }), [data]);
+
+  const summaryCards = [
+    { key: 'products', label: 'Products', value: summary.products, icon: FaBox, tone: 'green' },
+    { key: 'hotels', label: 'Hotels', value: summary.hotels, icon: FaHotel, tone: 'blue' },
+    { key: 'taxis', label: 'Taxis', value: summary.taxis, icon: FaCar, tone: 'gold' },
+    { key: 'queries', label: 'Queries', value: summary.inquiries, icon: FaEnvelope, tone: 'purple' },
+    { key: 'tourism', label: 'Tourism', value: summary.tourismSpots, icon: FaMapMarkerAlt, tone: 'teal' },
+    { key: 'businesses', label: 'Businesses', value: summary.businesses, icon: FaBuilding, tone: 'green' },
+    { key: 'orders', label: 'Orders', value: summary.orders, icon: FaReceipt, tone: 'rose' }
+  ];
 
   const notificationCounts = useMemo(() => ({
     queries: (data.inquiries || []).filter((inquiry) => inquiry.status === 'Pending').length,
@@ -485,68 +495,103 @@ function AdminDashboard() {
 
   return (
     <div className="admin-dashboard-container">
-      <header className="admin-header">
-        <div className="admin-header-left">
-          <button className="admin-back-btn" onClick={() => navigate('/')}>
-            <FaArrowLeft /> User View
+      <aside className="admin-sidebar">
+        <button type="button" className="admin-brand" onClick={() => setActiveTab('dashboard')} aria-label="Go to dashboard">
+          <img src={`${process.env.PUBLIC_URL}/nilgiris-logo.png`} alt="" />
+          <span><strong>Nilgiris</strong><small>Tourism Operations</small></span>
+        </button>
+        <nav className="admin-sidebar-nav" aria-label="Admin modules">
+          <button
+            type="button"
+            className={`admin-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            <FaTachometerAlt /><span>Dashboard</span>
           </button>
-          <div>
-            <p className="admin-label">Admin Portal</p>
-            <h1>Nilgiris Operations Center</h1>
-          </div>
-        </div>
-
-        <div className="admin-header-right">
-          <span className="admin-user"><strong>{user?.email}</strong></span>
-          <button className="admin-logout-btn" onClick={handleLogout}>Logout</button>
-        </div>
-      </header>
-
-      <main className="admin-main">
-        <section className="admin-summary-grid">
-          <div className="summary-card green">
-            <span>Products</span>
-            <strong>{summary.products}</strong>
-          </div>
-          <div className="summary-card blue">
-            <span>Hotels</span>
-            <strong>{summary.hotels}</strong>
-          </div>
-          <div className="summary-card gold">
-            <span>Taxis</span>
-            <strong>{summary.taxis}</strong>
-          </div>
-          <div className="summary-card purple">
-            <span>Queries</span>
-            <strong>{summary.inquiries}</strong>
-          </div>
-          <div className="summary-card orange">
-            <span>Tourism</span>
-            <strong>{summary.tourismSpots}</strong>
-          </div>
-          <div className="summary-card teal">
-            <span>Businesses</span>
-            <strong>{summary.businesses}</strong>
-          </div>
-          <div className="summary-card pink">
-            <span>Orders</span>
-            <strong>{summary.orders}</strong>
-          </div>
-        </section>
-
-        <nav className="admin-tabs">
           {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
-              className={activeTab === key ? 'admin-tab active' : 'admin-tab'}
+              type="button"
+              className={`admin-tab ${activeTab === key ? 'active' : ''}`}
               onClick={() => setActiveTab(key)}
             >
-              <Icon /> {label}
+              <Icon /><span>{label}</span>
               {notificationCounts[key] > 0 && <span className="admin-tab-count" aria-label={`${notificationCounts[key]} awaiting attention`}>{notificationCounts[key]}</span>}
             </button>
           ))}
         </nav>
+        <div className="admin-sidebar-footer"><FaLeaf /><span>Discover the Nilgiris</span></div>
+      </aside>
 
+      <div className="admin-main-shell">
+        <header className="admin-header">
+          <div className="admin-header-copy">
+            <p className="admin-label">Smart Tourism Administration Dashboard</p>
+            <h1>Nilgiris Operations Center</h1>
+          </div>
+          <div className="admin-header-right">
+            <button className="admin-back-btn" onClick={() => navigate('/')}>
+              <FaArrowLeft /> <span>User View</span>
+            </button>
+            <span className="admin-user"><FaUserCircle /><strong>{user?.email}</strong></span>
+            <button className="admin-logout-btn" onClick={handleLogout}><FaSignOutAlt /><span>Logout</span></button>
+          </div>
+        </header>
+
+        <main className="admin-main">
+        <section className="admin-summary-grid">
+          {summaryCards.map(({ key, label, value, icon: Icon, tone }) => (
+            <button
+              type="button"
+              key={key}
+              className={`summary-card ${tone}`}
+              onClick={() => setActiveTab(key)}
+              aria-label={`${label}: ${value}. Open ${label}`}
+            >
+              <span className="summary-icon"><Icon /></span>
+              <span className="summary-copy"><span>{label}</span><strong>{value}</strong></span>
+              <FaChevronRight className="summary-arrow" />
+            </button>
+          ))}
+        </section>
+
+        {activeTab === 'dashboard' && (
+          <section className="admin-overview-grid" aria-label="Dashboard overview">
+            <div className="admin-overview-panel admin-quick-nav">
+              <div className="admin-overview-heading">
+                <h2><FaChartBar /> Quick Navigation</h2>
+                <span>Open a module <FaChevronRight /></span>
+              </div>
+              <div className="admin-quick-grid">
+                {tabs.map(({ key, label, icon: Icon }) => (
+                  <button type="button" className="admin-quick-link" key={key} onClick={() => setActiveTab(key)}>
+                    <span className="admin-quick-icon"><Icon /></span>
+                    <span>{label}</span>
+                    {notificationCounts[key] > 0 && <span className="admin-quick-count">{notificationCounts[key]}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <aside className="admin-overview-panel admin-glance">
+              <h2><FaLeaf /> Nilgiris at a Glance</h2>
+              <div className="admin-glance-content">
+                <img src={`${process.env.PUBLIC_URL}/nilgiris-logo.png`} alt="Nilgiris Tourism" />
+                <div>
+                  <blockquote>“Explore. Support. Preserve.”</blockquote>
+                  <p>Smart tourism for a greener Nilgiris</p>
+                </div>
+              </div>
+            </aside>
+            <button type="button" className="admin-climate-banner" onClick={() => setActiveTab('climate')}>
+              <span className="admin-climate-shield"><FaShieldAlt /></span>
+              <span className="admin-climate-copy"><strong>Stay informed</strong><small>Manage verified travel-safety updates for visitors.</small></span>
+              <span className="admin-climate-action">Climate Safety <FaChevronRight /></span>
+            </button>
+          </section>
+        )}
+
+        {activeTab !== 'dashboard' && (
+          <>
         {activeTab === 'climate' && (
           <section className="admin-panel">
             <h2>Climate Safety & Travel Advisories</h2>
@@ -1222,7 +1267,10 @@ function AdminDashboard() {
             </div>
           </section>
         )}
+          </>
+        )}
       </main>
+      </div>
     </div>
   );
 }

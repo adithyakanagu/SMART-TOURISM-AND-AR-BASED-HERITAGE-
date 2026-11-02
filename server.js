@@ -5,7 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const { OAuth2Client } = require('google-auth-library');
+const { GoogleAuth, OAuth2Client } = require('google-auth-library');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 const { createDatabase } = require('./database');
@@ -44,6 +44,24 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const GOOGLE_MOBILE_REDIRECT_URI = process.env.GOOGLE_MOBILE_REDIRECT_URI || '';
+const FIREBASE_SERVICE_ACCOUNT_JSON = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() || '';
+let firebaseServiceAccount = null;
+if (FIREBASE_SERVICE_ACCOUNT_JSON) {
+  try {
+    firebaseServiceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
+  } catch {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON must contain valid service-account JSON.');
+  }
+  if (!firebaseServiceAccount.project_id || !firebaseServiceAccount.client_email || !firebaseServiceAccount.private_key) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is missing project_id, client_email, or private_key.');
+  }
+}
+const firebasePushAuth = firebaseServiceAccount
+  ? new GoogleAuth({
+    credentials: firebaseServiceAccount,
+    scopes: ['https://www.googleapis.com/auth/firebase.messaging']
+  })
+  : null;
 const googleAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 const googleMobileAuthClient = GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_MOBILE_REDIRECT_URI
   ? new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_MOBILE_REDIRECT_URI)
@@ -210,6 +228,11 @@ async function markOrderPaid(order, payment = {}) {
     orders: data.orders.map((item) => String(item.id) === String(order.id) ? paidOrder : item)
   });
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  dispatchPushNotification(paidOrder.userEmail, {
+    category: 'request_updates',
+    title: 'Payment received',
+    body: `Payment for your order has been verified. Bill ${paidOrder.billNumber} is ready.`
+  });
   return paidOrder;
 }
 
@@ -218,6 +241,88 @@ function broadcast(event, payload) {
   for (const client of clients) {
     client.write(data);
   }
+}
+
+async function sendPushNotifications(emails, { category, title, body }) {
+  const recipients = Array.isArray(emails) ? emails : [emails];
+  const normalizedEmails = [...new Set(recipients.map((email) => String(email || '').trim().toLowerCase()).filter(Boolean))];
+  const devices = normalizedEmails.length
+    ? normalizedEmails.flatMap((email) => database.getPushDevices(email))
+    : database.getPushDevices();
+  if (devices.length === 0) return;
+  if (!firebasePushAuth) {
+    console.error('Push delivery is unavailable: configure FIREBASE_SERVICE_ACCOUNT_JSON on the API server.');
+    return;
+  }
+
+  const authClient = await firebasePushAuth.getClient();
+  const { token: accessToken } = await authClient.getAccessToken();
+  if (!accessToken) throw new Error('Google did not provide an access token for Firebase Cloud Messaging.');
+
+  const endpoint = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(firebaseServiceAccount.project_id)}/messages:send`;
+  const results = await Promise.all(devices.map(async (device) => {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: {
+            token: device.token,
+            notification: {
+              title: String(title || 'Nilgiris Tourism').slice(0, 120),
+              body: String(body || '').slice(0, 500)
+            },
+            data: {
+              category: String(category || 'admin_messages'),
+              screen: 'notifications'
+            },
+            android: {
+              priority: 'HIGH',
+              notification: {
+                channelId: 'tourism_alerts',
+                sound: 'app_noti'
+              }
+            }
+          }
+        })
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (response.ok) return true;
+
+      const errorCode = result.error?.details?.find((detail) => detail.errorCode)?.errorCode || result.error?.status;
+      if (errorCode === 'UNREGISTERED') database.removePushDeviceByToken(device.token);
+      throw new Error(`FCM returned HTTP ${response.status}${errorCode ? ` (${errorCode})` : ''}.`);
+    } catch (error) {
+      console.error(`Firebase Cloud Messaging failed for category "${category}":`, error.message);
+      return false;
+    }
+  }));
+  const deliveredCount = results.filter(Boolean).length;
+  if (deliveredCount !== devices.length) console.error(`Firebase Cloud Messaging delivered ${deliveredCount} of ${devices.length} notifications.`);
+}
+
+function dispatchPushNotification(recipients, notification) {
+  sendPushNotifications(recipients, notification).catch((error) => {
+    console.error('Firebase Cloud Messaging delivery failed:', error.message);
+  });
+}
+
+function notifyClimateAdvisory(advisory, previous) {
+  if (!['caution', 'not-recommended'].includes(advisory.status)) return;
+  if (previous && ['status', 'title', 'message', 'precautions', 'locationId'].every((key) => previous[key] === advisory[key])) return;
+
+  const locationName = advisory.locationId === 'all'
+    ? 'The Nilgiris'
+    : CLIMATE_LOCATIONS.find((location) => location.id === advisory.locationId)?.name || 'The Nilgiris';
+  dispatchPushNotification(null, {
+    category: 'safety_alerts',
+    title: `${advisory.status === 'not-recommended' ? 'Travel warning' : 'Travel safety alert'}: ${locationName}`,
+    body: `${advisory.title}. ${advisory.message}`
+  });
 }
 
 
@@ -475,10 +580,31 @@ app.post('/api/payments/razorpay/webhook', express.raw({ type: 'application/json
       ...data,
       orders: data.orders.map((item) => String(item.id) === String(order.id) ? { ...item, status: 'Payment Failed' } : item)
     });
+    dispatchPushNotification(order.userEmail, {
+      category: 'request_updates',
+      title: 'Payment update',
+      body: `Payment for your order could not be completed. You can reopen the app to review the order.`
+    });
   }
   return res.json({ received: true });
 });
 app.use(express.json({ limit: '20mb' }));
+
+app.post('/api/push/register', authenticateToken, (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  if (token.length < 20 || token.length > 4096) {
+    return res.status(400).json({ message: 'A valid mobile push token is required.' });
+  }
+  database.registerPushDevice(req.user.email, token);
+  return res.status(204).end();
+});
+
+app.post('/api/push/unregister', authenticateToken, (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  if (!token) return res.status(400).json({ message: 'A mobile push token is required.' });
+  database.removePushDevice(req.user.email, token);
+  return res.status(204).end();
+});
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -488,7 +614,8 @@ app.get('/api/health', (req, res) => {
     emailConfigured: EMAIL_CONFIGURED,
     emailProviderStatus,
     googleBrowserConfigured: Boolean(googleMobileAuthClient),
-    paymentsConfigured: razorpayConfigured()
+    paymentsConfigured: razorpayConfigured(),
+    pushConfigured: Boolean(firebasePushAuth)
   });
 });
 
@@ -556,6 +683,7 @@ app.post('/api/admin/climate-advisories', authenticateToken, requireAdmin, (req,
     });
     database.markInitialized();
     broadcast('data-updated', { updatedAt: new Date().toISOString() });
+    notifyClimateAdvisory(advisory);
     return res.status(201).json({ advisory, advisories: stored.climateAdvisories });
   } catch (error) {
     return res.status(400).json({ message: error.message || 'The advisory could not be published.' });
@@ -574,6 +702,7 @@ app.put('/api/admin/climate-advisories/:id', authenticateToken, requireAdmin, (r
     });
     database.markInitialized();
     broadcast('data-updated', { updatedAt: new Date().toISOString() });
+    notifyClimateAdvisory(advisory, existing);
     return res.json({ advisory, advisories: stored.climateAdvisories });
   } catch (error) {
     return res.status(400).json({ message: error.message || 'The advisory could not be updated.' });
@@ -1025,6 +1154,14 @@ app.post('/api/data', authenticateToken, requireAdmin, (req, res) => {
   });
   database.markInitialized();
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  const existingFormIds = new Set((currentData.forms || []).map((form) => String(form.id)));
+  (payload.forms || [])
+    .filter((form) => !existingFormIds.has(String(form.id)) && form.status === 'Unread' && form.targetEmail)
+    .forEach((form) => dispatchPushNotification(form.targetEmail, {
+      category: 'admin_messages',
+      title: form.title || 'New questionnaire from Nilgiris Tourism',
+      body: form.description || 'An administrator sent you a new questionnaire.'
+    }));
   res.json({ message: 'Data saved successfully.', data: stored });
 });
 
@@ -1050,6 +1187,11 @@ app.post('/api/inquiries', authenticateToken, (req, res) => {
 
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  dispatchPushNotification(inquiry.userEmail, {
+    category: 'request_updates',
+    title: 'Request received',
+    body: `${inquiry.subject} is being reviewed.`
+  });
   res.status(201).json({ message: 'Inquiry submitted successfully.', inquiry, data: filterUserData(nextData, req.user.email) });
 });
 
@@ -1087,6 +1229,13 @@ app.post('/api/messages', authenticateToken, communicationLimiter, (req, res) =>
   const nextData = { ...data, messages: [messageRecord, ...(data.messages || [])] };
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  if (req.user.role === 'admin') {
+    dispatchPushNotification(toEmail, {
+      category: 'admin_messages',
+      title: 'New message from Nilgiris Tourism',
+      body
+    });
+  }
   return res.status(201).json({
     message: 'Conversation message sent.',
     messageRecord,
@@ -1131,6 +1280,13 @@ app.post('/api/mail/send', authenticateToken, communicationLimiter, async (req, 
   const nextData = { ...data, messages: [messageRecord, ...(data.messages || [])] };
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  if (req.user.role === 'admin') {
+    dispatchPushNotification(toEmail, {
+      category: 'admin_messages',
+      title: subject,
+      body
+    });
+  }
   return res.status(201).json({
     message: 'Email accepted by the configured provider.',
     messageRecord,
@@ -1206,6 +1362,11 @@ app.post('/api/orders/checkout', authenticateToken, (req, res) => {
     const nextData = { ...data, orders: [order, ...data.orders] };
     saveDatabase(nextData);
     broadcast('data-updated', { updatedAt: new Date().toISOString() });
+    dispatchPushNotification(order.userEmail, {
+      category: 'request_updates',
+      title: 'Order received',
+      body: `Your order is created and awaiting payment.`
+    });
     return res.status(201).json({
       message: razorpayConfigured()
         ? 'Order created. Continue to UPI payment.'
@@ -1328,6 +1489,11 @@ app.post('/api/admin/orders/:id/confirm-payment', authenticateToken, requireAdmi
   if (order.status !== 'Confirmed') {
     saveDatabase(confirmedData);
     broadcast('data-updated', { updatedAt: new Date().toISOString() });
+    dispatchPushNotification(verifiedOrder.userEmail, {
+      category: 'request_updates',
+      title: 'Order confirmed',
+      body: `Your payment is confirmed. Bill ${verifiedOrder.billNumber} is ready.`
+    });
   }
 
   if (verifiedOrder.billEmailSentAt) {
@@ -1557,6 +1723,8 @@ app.post('/api/admin/inquiries/:id/reply', authenticateToken, requireAdmin, (req
   const { id } = req.params;
   const { replyText, status = 'Replied' } = req.body || {};
   const data = ensureDatabase();
+  const existing = data.inquiries.find((inquiry) => inquiry.id === Number(id));
+  if (!existing) return res.status(404).json({ message: 'Inquiry not found.' });
   const trimmedReply = String(replyText || '').trim();
 
   const nextData = {
@@ -1571,6 +1739,19 @@ app.post('/api/admin/inquiries/:id/reply', authenticateToken, requireAdmin, (req
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
   const updated = nextData.inquiries.find((inquiry) => inquiry.id === Number(id));
+  if (trimmedReply && trimmedReply !== existing.reply) {
+    dispatchPushNotification(updated.userEmail, {
+      category: 'admin_messages',
+      title: `Admin replied: ${updated.subject}`,
+      body: trimmedReply
+    });
+  } else if (updated.status !== existing.status) {
+    dispatchPushNotification(updated.userEmail, {
+      category: 'request_updates',
+      title: 'Request status updated',
+      body: `${updated.subject}: ${updated.status}.`
+    });
+  }
   res.json({ message: 'Inquiry updated successfully.', inquiry: updated, data: nextData });
 });
 
@@ -1578,6 +1759,8 @@ app.put('/api/admin/inquiries/:id/status', authenticateToken, requireAdmin, (req
   const { id } = req.params;
   const { status } = req.body || {};
   const data = ensureDatabase();
+  const existing = data.inquiries.find((inquiry) => inquiry.id === Number(id));
+  if (!existing) return res.status(404).json({ message: 'Inquiry not found.' });
 
   const nextData = {
     ...data,
@@ -1588,6 +1771,14 @@ app.put('/api/admin/inquiries/:id/status', authenticateToken, requireAdmin, (req
 
   saveDatabase(nextData);
   broadcast('data-updated', { updatedAt: new Date().toISOString() });
+  const updated = nextData.inquiries.find((inquiry) => inquiry.id === Number(id));
+  if (updated.status !== existing.status) {
+    dispatchPushNotification(updated.userEmail, {
+      category: 'request_updates',
+      title: 'Request status updated',
+      body: `${updated.subject}: ${updated.status}.`
+    });
+  }
   res.json({ message: 'Inquiry status updated.', data: nextData });
 });
 

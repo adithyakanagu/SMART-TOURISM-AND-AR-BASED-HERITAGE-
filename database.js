@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
 
 const collections = [
@@ -28,8 +29,15 @@ function createDatabase(databasePath, legacyPath) {
   database.pragma('foreign_keys = ON');
   database.exec('CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
   database.exec('CREATE TABLE IF NOT EXISTS auth_otp_state (email TEXT PRIMARY KEY, payload TEXT NOT NULL)');
+  database.exec('CREATE TABLE IF NOT EXISTS push_devices (token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, token TEXT NOT NULL, updated_at TEXT NOT NULL)');
+  database.exec('CREATE INDEX IF NOT EXISTS push_devices_email_idx ON push_devices(email)');
   const readOtpState = database.prepare('SELECT payload FROM auth_otp_state WHERE email = ?');
   const writeOtpState = database.prepare('INSERT OR REPLACE INTO auth_otp_state (email, payload) VALUES (?, ?)');
+  const writePushDevice = database.prepare('INSERT OR REPLACE INTO push_devices (token_hash, email, token, updated_at) VALUES (?, ?, ?, ?)');
+  const readPushDevices = database.prepare('SELECT email, token FROM push_devices');
+  const readUserPushDevices = database.prepare('SELECT email, token FROM push_devices WHERE email = ?');
+  const deletePushDevice = database.prepare('DELETE FROM push_devices WHERE token_hash = ? AND email = ?');
+  const deletePushDeviceByToken = database.prepare('DELETE FROM push_devices WHERE token_hash = ?');
 
   for (const collection of collections) {
     database.exec(`CREATE TABLE IF NOT EXISTS ${collection} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`);
@@ -90,6 +98,24 @@ function createDatabase(databasePath, legacyPath) {
     },
     saveOtpState(email, record, sendLog) {
       writeOtpState.run(email, JSON.stringify({ record, sendLog }));
+    },
+    registerPushDevice(email, token) {
+      const normalizedEmail = String(email || '').trim().toLowerCase();
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      writePushDevice.run(tokenHash, normalizedEmail, token, new Date().toISOString());
+    },
+    getPushDevices(email) {
+      const normalizedEmail = email ? String(email).trim().toLowerCase() : '';
+      return normalizedEmail ? readUserPushDevices.all(normalizedEmail) : readPushDevices.all();
+    },
+    removePushDevice(email, token) {
+      const normalizedEmail = String(email || '').trim().toLowerCase();
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      return deletePushDevice.run(tokenHash, normalizedEmail).changes > 0;
+    },
+    removePushDeviceByToken(token) {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      return deletePushDeviceByToken.run(tokenHash).changes > 0;
     },
     isInitialized() {
       return metadata.get('initialized')?.value === '1';

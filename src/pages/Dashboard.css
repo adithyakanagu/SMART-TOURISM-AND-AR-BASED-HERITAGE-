@@ -1350,12 +1350,76 @@
   line-height: 1;
 }
 
-.epass-frame {
-  width: 100%;
+.epass-content {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 14px;
   min-height: 0;
-  border: 1px solid #e2e8df;
-  border-radius: 12px;
-  background: #f8faf6;
+  padding: clamp(20px, 5vw, 44px);
+  border: 1px solid #d5e8d8;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(108, 190, 125, 0.18), transparent 56%),
+    linear-gradient(145deg, #f3fbf4, #eaf5ee);
+  text-align: center;
+}
+
+.epass-content-icon {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 20px;
+  color: #fff;
+  background: linear-gradient(135deg, #176d47, #45a663);
+  box-shadow: 0 8px 18px rgba(23, 109, 71, 0.22);
+  font-size: 1.65rem;
+}
+
+.epass-content h2,
+.epass-content p {
+  margin: 0;
+}
+
+.epass-content h2 {
+  color: #18392f;
+  font-size: clamp(1.05rem, 3vw, 1.4rem);
+}
+
+.epass-content > p {
+  max-width: 520px;
+  color: #536f62;
+  line-height: 1.55;
+}
+
+.epass-apply-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 11px 20px;
+  border: 0;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(110deg, #d74a37, #e98e2e, #248452);
+  box-shadow: 0 7px 18px rgba(35, 112, 72, 0.25);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.epass-apply-button:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.epass-error {
+  max-width: 520px;
+  margin: 0;
+  color: #a52e28;
+  font-size: 0.88rem;
 }
 
 .epass-open-link {

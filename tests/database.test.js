@@ -41,3 +41,35 @@ test('persists one-time codes and resend limits across database restarts and dat
     restartedDatabase.close();
   }
 });
+
+test('stores push devices per account and removes only the matching account token', (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nilgiris-push-test-'));
+  const databasePath = path.join(directory, 'app-data.sqlite');
+  const legacyPath = path.join(directory, 'missing-legacy-data.json');
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+  let database = createDatabase(databasePath, legacyPath);
+  try {
+    database.registerPushDevice('Visitor@Example.com', 'visitor-fcm-token-123456789012345');
+    database.registerPushDevice('admin@example.com', 'admin-fcm-token-123456789012345');
+    assert.deepEqual(database.getPushDevices('visitor@example.com'), [{
+      email: 'visitor@example.com',
+      token: 'visitor-fcm-token-123456789012345'
+    }]);
+    assert.equal(database.removePushDevice('other@example.com', 'visitor-fcm-token-123456789012345'), false);
+    assert.equal(database.removePushDevice('visitor@example.com', 'visitor-fcm-token-123456789012345'), true);
+  } finally {
+    database.close();
+  }
+
+  database = createDatabase(databasePath, legacyPath);
+  try {
+    assert.deepEqual(database.getPushDevices('visitor@example.com'), []);
+    assert.deepEqual(database.getPushDevices(), [{
+      email: 'admin@example.com',
+      token: 'admin-fcm-token-123456789012345'
+    }]);
+  } finally {
+    database.close();
+  }
+});
